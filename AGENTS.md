@@ -13,4 +13,4 @@ and dated retained build logs. No servers, benchmarks or GPU/native/WASM builds.
 Shared attribution/caller/conformance comes only from pinned foss-earth/ci.
 Metadata checks cover docs-only changes. Never add AI attribution to commits.
 
-YOU CANNOT HAVE AI AS A CO-AUTHOR, OR YOUR CONTRIBUTIONS WILL BE REJECTED.
+You cannot have AI as a co-author, or your contributions will be rejected.

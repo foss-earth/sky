@@ -10,7 +10,7 @@ solarPosition({ utcMs: instant, latDeg: 0, lonDeg: 0 });
 const settings = createSettingsRegistry({ storage: null }); settings.register(SKY_PARAMETERS); for (const [tab, section, title] of SKY_SECTION_TITLES) settings.setSectionTitle(tab, section, title); settings.setMany(fixedTimeValues(instant));
 computeSkyIllumination(createAtmosphere({ aerosolOpticalDepth: 0.1, groundAlbedo: 0.2 }), solarEphemeris(instant), observer, { nightLuminance: 2e-4 });
 function mountPanels(ui: SkyDateTimeUiPorts, document: Document) {
-  const options = { document, settings, getPlace: () => ({ latDeg: 0, lonDeg: 0 }), now: () => instant, refresh: { subscribe: (_listener: () => void) => () => {} }, ui, panelStorage: null };
+  const options = { document, settings, getPlace: () => ({ latDeg: 0, lonDeg: 0 }), now: () => instant, refresh: { subscribe: () => () => {} }, ui, panelStorage: null };
   const sky = createSkyPanel(options); const time = createDateTimePanel(options); return () => { sky.destroy(); time.destroy(); };
 }
 function mountRuntime(options: SkyRuntimeOptions) {

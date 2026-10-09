@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createSettingsRegistry } from "@foss-earth/ui/settings";
 import { SKY_PARAMETERS, SKY_SECTION_TITLES } from "../src/settings.js";
 import { fixedTimeValues, instantInUse } from "../src/time.js";
-import { HOUR_MS, solarClockMs, solarDayStartMs } from "../src/solarDay.js";
+import { DAY_MS, HOUR_MS, solarClockMs, solarDayStartMs } from "../src/solarDay.js";
 import { createDateTimePanel } from "../src/panels/dateTimePanel.js";
 import { createSkyPanel, describeSun } from "../src/panels/skyPanel.js";
 import type { DialFrame, DialOptions, SkyDateTimeUiPorts, SkyPanelRefreshPort } from "../src/panels/ports.js";
@@ -32,7 +32,10 @@ describe("Sky/Time injected panel lifecycle", () => {
     const h = harness(); const interval = vi.spyOn(window, "setInterval"); const panel = createDateTimePanel({ document, settings: h.settings, getPlace: () => h.place.value, now: () => h.now.utcMs, ui: h.ui, refresh: h.source, panelStorage: null, deviceZone: () => ({ name: "UTC", id: "UTC", offsetMinutes: 0 }) }); document.body.append(panel.element);
     expect(h.dials).toHaveLength(2); expect(h.sectionOptions[0]).toMatchObject({ tab: "time", section: "instant", panelStorage: null }); expect(interval).not.toHaveBeenCalled(); interval.mockRestore();
     const initialText = h.dials[0].frame!.valueText; h.now.utcMs += HOUR_MS; h.refresh(); expect(h.dials[0].frame!.valueText).not.toBe(initialText);
-    h.dials[0].options.onPress(0); expect(h.settings.get("sky.time.mode")).toBe("fixed"); const fixed = instantInUse(h.settings, () => h.now.utcMs).utcMs; const solar = solarClockMs(fixed, h.place.value.lonDeg); expect(Math.abs(solar - solarDayStartMs(solar))).toBeLessThan(60_000);
+    // Midnight is the bottom of the original noon-at-top dial.
+    h.dials[0].options.onPress(0.5); expect(h.settings.get("sky.time.mode")).toBe("fixed"); const fixed = instantInUse(h.settings, () => h.now.utcMs).utcMs; const solar = solarClockMs(fixed, h.place.value.lonDeg); const sinceMidnight = solar - solarDayStartMs(solar);
+    // The saved whole-second UTC value may land just before midnight.
+    expect(Math.min(sinceMidnight, DAY_MS - sinceMidnight)).toBeLessThan(60_000);
     const before = fixed; h.dials[0].options.onKey("pageNext"); expect(instantInUse(h.settings, () => h.now.utcMs).utcMs).toBeGreaterThan(before + HOUR_MS - 2000);
     panel.destroy();panel.destroy(); expect(h.stopRefresh).toHaveBeenCalledOnce(); for (const dial of h.dials) expect(dial.destroy).toHaveBeenCalledOnce(); expect(h.hostDestroy).toHaveBeenCalledOnce(); expect(h.sectionDestroy).toHaveBeenCalledOnce(); expect(panel.element.isConnected).toBe(false);
     const stopped = h.settings.get("sky.time.utcHours");h.dials[0].options.onPress(0);expect(h.settings.get("sky.time.utcHours")).toBe(stopped);

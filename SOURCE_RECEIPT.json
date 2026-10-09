@@ -1,16 +1,16 @@
 {
   "schemaVersion": 1,
   "owner": "foss-earth/sky",
-  "preparedAtUtc": "2026-10-09T19-03-43Z",
+  "preparedAtUtc": "2026-10-09T20-23-58Z",
   "status": "SOURCE-ONLY current bytes; checks/history/installed consumers/artifacts/adoption/admission UNRUN",
   "sourceRevision": "90e23b3ee96f53ec5900afc5991a21fffa58649d",
-  "priorSourceReceipt": "build/source-only/2026-10-09T19-03-43Z/SOURCE_RECEIPT.json.before",
-  "sourceManifestPath": "build/source-only/2026-10-09T19-03-43Z/source-manifest.json",
+  "priorSourceReceipt": "build/source-only/2026-10-09T20-23-58Z/SOURCE_RECEIPT.json.before",
+  "sourceManifestPath": "build/source-only/2026-10-09T20-23-58Z/source-manifest.json",
   "sourceManifestEncoding": "UTF-8 sorted path JSON array, indent2, trailing LF; ignored outputs and receipt excluded",
-  "sourceManifestSha256": "d56f579581557d07eab5e302f615d1bc717d1870882743d0b27054d31f714a64",
-  "sourceFileCount": 91,
+  "sourceManifestSha256": "513395724db954d01b29c6b3489d753184b46f942b418d44605187f559259ce5",
+  "sourceFileCount": 93,
   "provenancePath": "provenance.json",
-  "provenanceSha256": "1cb4d87f1a3c0a29b9689a0bec517940933125ce7efc2d9706bb15c74ab5376c",
+  "provenanceSha256": "b08d5755335a5063239918f474efbb89f547893a12dd0e9c3279cf91e6b2cb36",
   "publicExports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -58,13 +58,18 @@
     },
     {
       "path": "AGENTS.md",
-      "sha256": "70267c6399e62e53e0d34dc868e0b3c15714e262a6c2431176650b8bbb48c898",
+      "sha256": "6869d07e97f39bf4b9bba1bc0ffbe82fa72020b99ab6e96a89bdea4305c8c40a",
       "bytes": 1037
     },
     {
+      "path": "CODE_OF_CONDUCT.md",
+      "sha256": "c3a907b9e659a0f5a4c701be1b34a7d416526c3a99f129bf4d3b9db09c7ffa9d",
+      "bytes": 3442
+    },
+    {
       "path": "CONTRIBUTING.md",
-      "sha256": "1f3a781768f4ee2bb48cd2c82a7b566b06dc99719dab3e32a8172c44487e4152",
-      "bytes": 651
+      "sha256": "bff45e3751b4b07e3a7c70c0933213776de452eba867a40290adcc80efde0138",
+      "bytes": 2599
     },
     {
       "path": "LICENSE",
@@ -78,8 +83,13 @@
     },
     {
       "path": "README.md",
-      "sha256": "40d6a24baae5037de823998bfa0d362182cea64ddddd03e147f70e06ef174f9f",
-      "bytes": 12341
+      "sha256": "10df17dd9ae16be4ba03644756d2492cb5d503becdd0ba35fb0c4906be77f050",
+      "bytes": 12418
+    },
+    {
+      "path": "SECURITY.md",
+      "sha256": "6baf6d3c1755360f5d902275c893074fd17af2fc10c140fe932b8a90d77d9942",
+      "bytes": 791
     },
     {
       "path": "SOURCE_LINEAGE.json",
@@ -143,8 +153,8 @@
     },
     {
       "path": "fixtures/consumer/minimal.ts",
-      "sha256": "c6dd5800f53ef8a2d9ec67e0056a85223e8154a9bfc87da02c304920533248ff",
-      "bytes": 2239
+      "sha256": "1695e0d56cd35156a5c001fb220b49ac4fd0b7a7b22f731404fbed6cac5bff9f",
+      "bytes": 2218
     },
     {
       "path": "fixtures/consumer/tsconfig.json",
@@ -178,13 +188,13 @@
     },
     {
       "path": "package.json",
-      "sha256": "1cb9b57f15058dece789c24653a43be5e554d5a2012aadc837b0c869efa64518",
-      "bytes": 3249
+      "sha256": "6a274d7c449c0c0c5b7e9540d8c37696b9ec48a1ec238a093311b1c31b5f6045",
+      "bytes": 3334
     },
     {
       "path": "provenance.json",
-      "sha256": "1cb4d87f1a3c0a29b9689a0bec517940933125ce7efc2d9706bb15c74ab5376c",
-      "bytes": 72872
+      "sha256": "b08d5755335a5063239918f474efbb89f547893a12dd0e9c3279cf91e6b2cb36",
+      "bytes": 73374
     },
     {
       "path": "scripts/check-installed-artifact.mjs",
@@ -458,8 +468,8 @@
     },
     {
       "path": "tests/panels.test.ts",
-      "sha256": "22689119428ed512d3920094be3e1e3ecc31eb9050325c4f0b51df972be324ff",
-      "bytes": 7705
+      "sha256": "917ca8d31def5f1932b132cd05f13acd6e6d054ba8552218f7f864fcbea5eb5c",
+      "bytes": 7915
     },
     {
       "path": "tests/readings.test.ts",
@@ -473,8 +483,8 @@
     },
     {
       "path": "tests/runtime-ports.test.ts",
-      "sha256": "e4d0a9ea2057d02e803b15a1c66425076230ff0b1196091530e380381db33ad7",
-      "bytes": 11171
+      "sha256": "0f6680569bd2f39c14a105a0c2c0a13ccd932c7f3e701aacc2781d84efca3da2",
+      "bytes": 11395
     },
     {
       "path": "tests/validation-tools.test.ts",
@@ -518,5 +528,5 @@
     "actual app adoption",
     "coordinator public transport and remote admission"
   ],
-  "policySentence": "YOU CANNOT HAVE AI AS A CO-AUTHOR, OR YOUR CONTRIBUTIONS WILL BE REJECTED."
+  "policySentence": "You cannot have AI as a co-author, or your contributions will be rejected."
 }

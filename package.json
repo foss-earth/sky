@@ -43,7 +43,11 @@
     "docs",
     "SOURCE_SELECTION.json",
     "SOURCE_RECEIPT.json",
-    "SOURCE_LINEAGE.json"
+    "SOURCE_LINEAGE.json",
+    "AGENTS.md",
+    "CODE_OF_CONDUCT.md",
+    "CONTRIBUTING.md",
+    "SECURITY.md"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json && node scripts/copy-assets.mjs",

@@ -164,7 +164,6 @@ remain outstanding. The source caller is now pinned to reviewed CI
 refs and remote admission have not run for this owner. No copied local checker substitutes for the shared component.
 Metadata checks must cover docs-only changes.
 
-YOU CANNOT HAVE AI AS A CO-AUTHOR, OR YOUR CONTRIBUTIONS WILL BE REJECTED.
 
 The four original model/render validation tools are now prepared under this
 owner's `scripts/validation/`, with public-only Engine/Renderer/Sky/UI imports and
@@ -175,3 +174,10 @@ declaration check; neither model timings nor a Chrome/GPU run is implicit in CI.
 The browser driver requires the exact installed optional Research public helper
 and its module digest. These tools, fixtures, new catalogue export and all current
 checks remain UNRUN; original evidence does not qualify the migration.
+
+## Project policies
+
+- [Code of conduct](CODE_OF_CONDUCT.md)
+- [Contributing](CONTRIBUTING.md)
+- [AGPL-3.0 license](LICENSE)
+- [Security](SECURITY.md)
