@@ -1,14 +1,15 @@
-import { DEG_TO_RAD, geodeticToEcef } from "../../src/camera/cameraMath";
-import { SKY_PARAMETERS } from "../../src/settings/catalogue/sky";
-import { ATMOSPHERE, createAtmosphere, type Rgb } from "../../src/sky/atmosphere";
-import { lunarEphemeris, lunarPosition, moonIlluminanceLux, moonMagnitude } from "../../src/sky/lunarPosition";
-import { solarEphemeris, solarPosition } from "../../src/sky/solarPosition";
+import { DEG_TO_RAD } from "@foss-earth/engine";
+import type { SkyModelHost } from "./ports.js";
+import { SKY_PARAMETERS } from "@foss-earth/sky/settings";
+import { ATMOSPHERE, createAtmosphere, type Rgb } from "@foss-earth/sky";
+import { lunarEphemeris, lunarPosition, moonIlluminanceLux, moonMagnitude } from "@foss-earth/sky";
+import { solarEphemeris, solarPosition } from "@foss-earth/sky";
 import {
   adaptEv100, computeSkyIllumination, createSkyDomeGeometry, ev100ForIlluminance, fillSkyDome, GROUND_LIGHT_SAMPLES, GROUND_LIGHT_TABLE,
   groundLightAt, groundLightTable, luminance, observerAt, PHOTOMETRY, starEv100, whiteLuminanceForEv100,
-} from "../../src/sky/skyState";
-import { STAR_RECORD_BYTES, STAR_RECORDS } from "../../src/sky/starCatalogue";
-import { applyMatrix3, decodeStarCatalogue, precessionMatrix, starDirections, starIlluminanceLux, starPlaceDeg } from "../../src/sky/stars";
+} from "@foss-earth/sky";
+import { STAR_RECORD_BYTES, STAR_RECORDS } from "@foss-earth/sky/catalogue";
+import { applyMatrix3, decodeStarCatalogue, precessionMatrix, starDirections, starIlluminanceLux, starPlaceDeg } from "@foss-earth/sky";
 
 /**
  * The sky model's numbers, for scripts/validation/sky-model.mjs: the Sun's
@@ -49,8 +50,8 @@ function instantForElevation(elevationDeg: number): number {
   return (low + high) / 2;
 }
 
-export function run(): Record<string, unknown> {
-  const clock = (): number => performance.now();
+export function run(host: SkyModelHost): Record<string, unknown> {
+  const { clock, geodeticToEcef, ecefToGeodetic } = host;
   const parameters = { aerosolOpticalDepth: 0.1, groundAlbedo: 0.2 };
   const atmosphere = createAtmosphere(parameters, clock);
   const out: Rgb = [0, 0, 0];
@@ -73,7 +74,7 @@ export function run(): Record<string, unknown> {
   const light = [90, 60, 45, 30, 20, 10, 5, 2, 0, -0.833, -2, -4, -6, -9, -12, -15, -18, -30].map(elevation => {
     const requested = Math.min(elevation, 89.4);
     const { x, y, z } = geodeticToEcef(0, 0, 0);
-    const state = computeSkyIllumination(atmosphere, solarEphemeris(instantForElevation(requested)), observerAt(x, y, z), { nightLuminance: 2e-4 });
+    const state = computeSkyIllumination(atmosphere, solarEphemeris(instantForElevation(requested)), observerAt(x, y, z, ecefToGeodetic), { nightLuminance: 2e-4 });
     const level = luminance(state.groundIlluminance);
     const published = PUBLISHED_LUX[String(elevation)];
     const ev100 = ev100ForIlluminance(state.meteredLux);
@@ -135,7 +136,7 @@ export function run(): Record<string, unknown> {
     ["no Moon up", Date.UTC(2026, 9, 8, 6, 0)],
   ].map(([name, utcMs]) => {
     const sun = solarEphemeris(utcMs as number);
-    const at = computeSkyIllumination(atmosphere, sun, observerAt(place.x, place.y, place.z), { nightLuminance: 2e-4, lunar: lunarEphemeris(utcMs as number, sun) });
+    const at = computeSkyIllumination(atmosphere, sun, observerAt(place.x, place.y, place.z, ecefToGeodetic), { nightLuminance: 2e-4, lunar: lunarEphemeris(utcMs as number, sun) });
     const metered = ev100ForIlluminance(at.meteredLux);
     const adapted = adaptEv100(metered, ev100ForIlluminance(at.zenithMeteredLux), DEFAULT_EXPOSURE.adaptation);
     const ev100 = Math.min(DEFAULT_EXPOSURE.maxEv100, Math.max(DEFAULT_EXPOSURE.minEv100, adapted));
@@ -269,7 +270,7 @@ export function run(): Record<string, unknown> {
   };
   const tablesMs = time(() => { createAtmosphere(parameters); }, 5);
   const { x, y, z } = geodeticToEcef(45 * DEG_TO_RAD, -93 * DEG_TO_RAD, 300);
-  const observer = observerAt(x, y, z);
+  const observer = observerAt(x, y, z, ecefToGeodetic);
   const ephemeris = solarEphemeris(Date.UTC(2026, 9, 7, 19, 0));
   const state = computeSkyIllumination(atmosphere, ephemeris, observer, { nightLuminance: 2e-4 });
   const domes = [[16, 16, 16], [32, 32, 16], [64, 64, 32]].map(([zenithSamples, azimuthSamples, integrationSteps]) => {
@@ -301,7 +302,7 @@ export function run(): Record<string, unknown> {
   // Exposure through a day with no Moon: what the meter reads, what the default adaptation makes of it, and what shows as white.
   const exposure = [60, 30, 10, 5, 2, 0, -2, -4, -6, -18].map(elevation => {
     const origin = geodeticToEcef(0, 0, 0);
-    const at = computeSkyIllumination(atmosphere, solarEphemeris(instantForElevation(elevation)), observerAt(origin.x, origin.y, origin.z), { nightLuminance: 2e-4 });
+    const at = computeSkyIllumination(atmosphere, solarEphemeris(instantForElevation(elevation)), observerAt(origin.x, origin.y, origin.z, ecefToGeodetic), { nightLuminance: 2e-4 });
     const metered = ev100ForIlluminance(at.meteredLux);
     const adapted = adaptEv100(metered, ev100ForIlluminance(at.zenithMeteredLux), DEFAULT_EXPOSURE.adaptation);
     const inRange = (ev: number): number => Math.min(DEFAULT_EXPOSURE.maxEv100, Math.max(DEFAULT_EXPOSURE.minEv100, ev));

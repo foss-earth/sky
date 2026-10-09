@@ -10,36 +10,57 @@
  * `--software` draws with Chrome's own software renderer (SwiftShader) instead: the same shaders and
  * the same pixels to check, for when a GPU run is not wanted. Its report says so, and it says nothing
  * of a GPU's drivers.
- * Usage: node scripts/validation/sky-render.mjs [--software]
+ * Usage: node scripts/validation/sky-render.mjs --chrome-helper-sha256=<64hex> [--software]
  */
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { createHash } from "node:crypto";
-import { build } from "vite";
-import { openHeadlessChrome, evaluate, waitForExpression } from "../lib/headlessChrome.mjs";
+import { fileURLToPath, pathToFileURL } from "node:url";
+
 import { newOutputDirectory } from "../lib/outputDirectory.mjs";
+import { sourceDigests, publicModule, ownerResolutionGuard, researchHelper } from "./toolSources.mjs";
 
 const software = process.argv.includes("--software");
+const helperDigest = process.argv.find(value => value.startsWith("--chrome-helper-sha256="))?.slice("--chrome-helper-sha256=".length);
+const helper = await researchHelper(helperDigest);
+const { openHeadlessChrome, evaluate, waitForExpression } = await import(pathToFileURL(helper.path).href);
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const out = newOutputDirectory("validation", "sky-render");
 await mkdir(out, { recursive: true });
 process.env.TMPDIR = out;
+const sources = await sourceDigests([
+  "scripts/validation/sky-render.mjs",
+  "scripts/validation/skyRenderCheck.ts",
+  "scripts/validation/ports.ts",
+  "scripts/validation/toolSources.mjs",
+  "fixtures/validation/skyRenderEntry.ts",
+  "fixtures/validation/skyRenderHost.ts",
+  "scripts/lib/outputDirectory.mjs",
+  "SOURCE_SELECTION.json",
+  "provenance.json"
+], [
+  "@foss-earth/sky",
+  "@foss-earth/sky/settings",
+  "@foss-earth/sky/catalogue",
+  "@foss-earth/engine",
+  "@foss-earth/sky/babylon",
+  "@foss-earth/engine/babylon",
+  "@foss-earth/engine/settings",
+  "@foss-earth/renderer/babylon",
+  "@foss-earth/ui/settings",
+  "@foss-earth/research/headless-chrome",
+  "vite",
+  "@babylonjs/core"
+]);
+
+const { build } = await import(pathToFileURL(await publicModule("vite")).href);
 await build({
   configFile: false, root, logLevel: "warn", publicDir: false,
+  plugins: [ownerResolutionGuard()],
   build: { outDir: path.join(out, "bundle"), emptyOutDir: false, lib: {
-    entry: path.join(root, "scripts/validation/skyRenderCheck.ts"), formats: ["iife"], name: "SkyRenderCheck", fileName: () => "check.js",
+    entry: path.join(root, "fixtures/validation/skyRenderEntry.ts"), formats: ["iife"], name: "SkyRenderCheck", fileName: () => "check.js",
   } },
 });
 const bundle = await readFile(path.join(out, "bundle/check.js"));
-const sources = {};
-for (const name of [
-  "scripts/validation/sky-render.mjs", "scripts/validation/skyRenderCheck.ts", "src/engine/babylon/createSkyRuntime.ts",
-  "src/engine/babylon/imagery/terrainLightPlugin.ts", "src/engine/babylon/createStarField.ts", "src/engine/babylon/createLightPoints.ts",
-  "src/engine/babylon/createGroundLightProbe.ts", "src/sky/skyState.ts", "src/sky/atmosphere.ts", "src/sky/lunarPosition.ts", "src/sky/stars.ts",
-]) {
-  sources[name] = createHash("sha256").update(await readFile(path.join(root, name))).digest("hex");
-}
 const SOFTWARE = /swiftshader|llvmpipe|software/i;
 const chrome = await openHeadlessChrome(path.join(out, "chrome-profile"), undefined, software
   // WebGL through ANGLE on SwiftShader, and WebGPU on SwiftShader's adapter: both on the CPU.
@@ -87,7 +108,7 @@ try {
   errors.push(String(error?.stack ?? error));
 } finally {
   try {
-    await writeFile(path.join(out, "report.json"), `${JSON.stringify({ tool: "scripts/validation/sky-render.mjs", generatedAt: new Date().toISOString(), browser, software, sources, errors, results }, null, 2)}\n`);
+    await writeFile(path.join(out, "report.json"), `${JSON.stringify({ tool: "scripts/validation/sky-render.mjs", generatedAt: new Date().toISOString(), browser, software, sources, helperSha256: helper.sha256, errors, results }, null, 2)}\n`);
   } finally {
     await chrome.close();
   }

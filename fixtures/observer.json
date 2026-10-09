@@ -1,0 +1,13 @@
+{
+  "description": "WGS84 host-owned NREL worked-example place/ECEF fixture; no runtime conversion implementation.",
+  "place": {
+    "latRad": 0.693637059094826,
+    "lonRad": -1.835712872638108,
+    "altMeters": 1830.14
+  },
+  "ecef": [
+    -1286219.235018511,
+    -4741071.253183921,
+    4057210.5694720456
+  ]
+}

@@ -1,0 +1,101 @@
+import { FreeCamera, NullEngine, Scene, Vector3 } from "@babylonjs/core";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { createSettingsRegistry, type SettingsRegistry } from "@foss-earth/ui/settings";
+import { SKY_PARAMETERS } from "../src/settings.js";
+import { createSkyRuntime, type GroundLightProbeOptions, type NightLightsOptions, type SkyRuntime, type SkyRuntimeOptions } from "../src/babylon/index.js";
+const engines: NullEngine[] = []; const skies: SkyRuntime[] = [];
+afterEach(() => { for (const sky of skies.splice(0)) sky.dispose(); for (const engine of engines.splice(0)) engine.dispose(); });
+function harness(extra: Partial<SkyRuntimeOptions> = {}, beforeCreate?: (settings: SettingsRegistry) => void) {
+  const engine = new NullEngine(); engines.push(engine); const scene = new Scene(engine);
+  const camera = new FreeCamera("host-camera", new Vector3(6378637, 0, 0), scene); scene.activeCamera = camera; camera.getViewMatrix(true);
+  const settings = createSettingsRegistry({ storage: null }); settings.register(SKY_PARAMETERS);
+  settings.setMany({ "sky.model": "lights", "sky.time.mode": "fixed", "sky.time.date": "2026-03-20", "sky.time.utcHours": 12, "sky.moon.mode": "off", "sky.stars.mode": "off", "sky.nightLights.mode": "off", "sky.groundLight.mode": "uniform" });
+  beforeCreate?.(settings);
+  const request = vi.fn(); const setLighting = vi.fn(() => true); const setLocalLights = vi.fn(); const convert = vi.fn(() => ({ latRad: 0, lonRad: 0, altMeters: 500 }));
+  const timers = new Map<number, () => void>(); let next = 1; const time = { utcMs: Date.UTC(2026, 2, 20, 12), hidden: false };
+  const sky = createSkyRuntime({ scene, settings, ecefToGeodetic: convert, terrain: { setLighting, setLocalLights }, nightTilePorts: { fetchTile: async () => { throw new Error("Unexpected tile acquisition"); }, measureResponse: response => response, retryDelayMs: () => 2000, setNightLightMap: () => true }, getWorldMatrix: () => null, requestRender: request, onLightingChange: () => {}, isGround: () => false, now: () => time.utcMs, clock: () => 0, isHidden: () => time.hidden, timers: { set: callback => { const id = next++; timers.set(id, callback); return id; }, clear: id => { timers.delete(id); } }, ...extra }); skies.push(sky);
+  return { scene, settings, sky, request, setLighting, setLocalLights, convert, timers, time };
+}
+describe("Sky host/runtime lifecycle", () => {
+  it("uses one supplied scene, lighting adapter and coordinate port and leaves a static view unchanged", () => {
+    const h = harness(); h.sky.update(); expect(h.convert).toHaveBeenCalledWith(6378637, 0, 0); expect(h.sky.getEnvironment()?.model).toBe("lights"); expect(h.setLighting.mock.calls.at(-1)?.[0]).toMatchObject({ perPoint: true });
+    const computed = h.sky.getEnvironment()!.cost.computations; const requested = h.request.mock.calls.length; h.sky.update(); expect(h.sky.getEnvironment()!.cost.computations).toBe(computed); expect(h.request).toHaveBeenCalledTimes(requested); expect(h.timers.size).toBe(0);
+    h.sky.dispose(); expect(h.scene.lights).toHaveLength(0); const stopped = h.request.mock.calls.length; h.settings.set("sky.time.utcHours", 13); expect(h.request).toHaveBeenCalledTimes(stopped);
+  });
+  it("wakes only through host timers when the Sun threshold is due and stops on hidden/disposal", () => {
+    const h = harness(); h.settings.set("sky.time.mode", "now"); h.sky.update(); expect(h.timers.size).toBe(1); const requested = h.request.mock.calls.length; const [id, callback] = [...h.timers][0]; h.timers.delete(id); h.time.hidden = true; callback(); expect(h.request).toHaveBeenCalledTimes(requested);
+    h.time.hidden = false; h.sky.update(); expect(h.timers.size).toBe(1); h.sky.dispose(); expect(h.timers.size).toBe(0);
+  });
+  it("passes the same host cost clock to the ground probe and suppresses late readings and setters", () => {
+    const clock = vi.fn(() => 42), dispose = vi.fn();
+    const createGroundProbe = vi.fn((_options: import("../src/babylon/createGroundLightProbe.js").GroundLightProbeOptions) => ({ request: () => true,busy: () => false,dispose }));
+    const h = harness({ clock,createGroundProbe }); h.settings.set("sky.groundLight.mode","rendered");h.sky.update();
+    expect(createGroundProbe).toHaveBeenCalledOnce();const options = createGroundProbe.mock.calls[0][0];expect(options.clock).toBe(clock);expect(options.clock()).toBe(42);
+    h.sky.dispose();expect(dispose).toHaveBeenCalledOnce();const frames = h.request.mock.calls.length,local = h.setLocalLights.mock.calls.length;
+    options.onReading({ rgb: [1,1,1],pixels: 1,latencyMs: 5 });h.sky.setGroundLights([]);h.sky.setGroundLightReceiver(() => Vector3.Zero());h.sky.update();
+    expect(h.request).toHaveBeenCalledTimes(frames);expect(h.setLocalLights).toHaveBeenCalledTimes(local);expect(h.sky.getEnvironment()).toBeNull();
+  });
+  it("marks the actual runtime stale before cleanup and aggregates every native, host and listener failure", () => {
+    const failures = Object.fromEntries(["timer", "direct", "ambient", "domeMesh", "domeMaterial", "probe", "night", "terrain", "lighting", "listener", "frame", "unsubscribe", "local", "note"].map(name => [name, new Error(name)]));
+    const callbacks = new Map<number, () => void>(); let next = 1; let failing = false;
+    const clear = vi.fn((id: number) => { callbacks.delete(id); if (failing) throw failures.timer; });
+    const setLighting = vi.fn((value: unknown) => { if (failing && value === null) throw failures.terrain; return true; });
+    const setLocalLights = vi.fn(() => { if (failing) throw failures.local; });
+    const onLightingChange = vi.fn((active: boolean) => { if (failing && !active) throw failures.lighting; });
+    const requestRender = vi.fn(() => { if (failing) throw failures.frame; });
+    const probeDispose = vi.fn(() => { throw failures.probe; }), nightDispose = vi.fn(() => { throw failures.night; });
+    const createGroundProbe = vi.fn((_options: GroundLightProbeOptions) => ({ request: () => true, busy: () => false, dispose: probeDispose }));
+    const createNightLights = vi.fn((_options: NightLightsOptions) => ({ update: () => {}, radianceAt: () => null, getState: () => ({ window: null, pending: null, needed: 0, here: 0, loading: 0, failed: 0, memoryBytes: 0, gpuBytes: 0, downloadedBytes: 0, error: null }), dispose: nightDispose }));
+    let staleSettings: Parameters<SettingsRegistry["subscribe"]>[0] = () => {};
+    let detach: () => void = () => {};
+    const unsubscribe = vi.fn(() => { throw failures.unsubscribe; });
+    const h = harness({ requestRender, onLightingChange, terrain: { setLighting, setLocalLights }, createGroundProbe, createNightLights,
+      timers: { set: callback => { const id = next++; callbacks.set(id, callback); return id; }, clear },
+    }, settings => {
+      const subscribe = settings.subscribe.bind(settings), setNote = settings.setNote.bind(settings);
+      vi.spyOn(settings, "subscribe").mockImplementation(listener => { staleSettings = listener; detach = subscribe(listener); return unsubscribe; });
+      vi.spyOn(settings, "setNote").mockImplementation((id, note) => { setNote(id, note); if (failing && id === "sky.time.date") throw failures.note; });
+    });
+    h.settings.setMany({ "sky.model": "dome", "sky.dome.zenithSamples": 8, "sky.dome.azimuthSamples": 8, "sky.dome.integrationSteps": 4, "sky.time.mode": "now", "sky.groundLight.mode": "rendered", "sky.nightLights.mode": "light" });
+    h.sky.update(); expect(callbacks.size).toBe(1); expect(createGroundProbe).toHaveBeenCalledOnce(); expect(createNightLights).toHaveBeenCalledOnce();
+    const pendingTimer = [...callbacks.values()][0], nativeReleases: Array<{ mock: { calls: unknown[] } }> = [];
+    const targets: ReadonlyArray<readonly [{ dispose(): void }, Error]> = [
+      [h.scene.getLightByName("sky-sun")!, failures.direct], [h.scene.getLightByName("sky-light")!, failures.ambient],
+      [h.scene.getMeshByName("sky-dome")!, failures.domeMesh], [h.scene.getMaterialByName("sky-dome-material")!, failures.domeMaterial],
+    ];
+    for (const [resource, reason] of targets) {
+      const release = resource.dispose.bind(resource);
+      const spy = vi.spyOn(resource, "dispose").mockImplementation(() => {
+        expect(h.sky.isLighting()).toBe(false); expect(h.sky.getEnvironment()).toBeNull();
+        h.sky.update(); release(); throw reason;
+      });
+      nativeReleases.push(spy);
+    }
+    const listener = vi.fn((value: unknown) => { if (value === null) throw failures.listener; }), laterListener = vi.fn();
+    h.sky.subscribe(listener); h.sky.subscribe(laterListener); failing = true;
+    try {
+      let caught: unknown;
+      try { h.sky.dispose(); } catch (error) { caught = error; }
+      expect(caught).toBeInstanceOf(AggregateError);
+      expect((caught as AggregateError).errors).toEqual(Object.values(failures));
+      for (const release of nativeReleases) expect(release).toHaveBeenCalledOnce();
+      expect(probeDispose).toHaveBeenCalledOnce(); expect(nightDispose).toHaveBeenCalledOnce(); expect(unsubscribe).toHaveBeenCalledOnce();
+      expect(laterListener).toHaveBeenCalledExactlyOnceWith(null); expect(callbacks.size).toBe(0); expect(h.scene.lights).toHaveLength(0); expect(h.scene.getMeshByName("sky-dome")).toBeNull();
+      const frames = requestRender.mock.calls.length, local = setLocalLights.mock.calls.length, lighting = setLighting.mock.calls.length;
+      staleSettings(new Set(["sky.model", "sky.time.mode", "sky.exposure.ev100"])); pendingTimer();
+      createGroundProbe.mock.calls[0][0].onReading({ rgb: [1, 1, 1], pixels: 1, latencyMs: 5 }); createNightLights.mock.calls[0][0].requestRender();
+      h.sky.setGroundLights([]); h.sky.setGroundLightReceiver(() => Vector3.Zero()); h.sky.update(); h.sky.dispose();
+      h.settings.set("sky.time.utcHours", 13);
+      expect(requestRender).toHaveBeenCalledTimes(frames); expect(setLocalLights).toHaveBeenCalledTimes(local); expect(setLighting).toHaveBeenCalledTimes(lighting);
+      expect(h.sky.getEnvironment()).toBeNull(); expect(h.sky.isLighting()).toBe(false); expect(h.sky.getNightLights()).toBeNull(); expect(unsubscribe).toHaveBeenCalledOnce();
+    } finally { failing = false; detach(); }
+  });
+  it("finishes ordinary model-off cleanup after a native failure and can use a fresh resource later", () => {
+    const h = harness(); h.sky.update();
+    const direct = h.scene.getLightByName("sky-sun")!, release = direct.dispose.bind(direct), failure = new Error("native light release");
+    const dispose = vi.spyOn(direct, "dispose").mockImplementation(() => { release(); throw failure; });
+    const listener = vi.fn(); h.sky.subscribe(listener); h.settings.set("sky.model", "off");
+    expect(() => h.sky.update()).toThrow(AggregateError); expect(dispose).toHaveBeenCalledOnce(); expect(h.scene.lights).toHaveLength(0); expect(h.sky.getEnvironment()).toBeNull(); expect(listener).toHaveBeenCalledExactlyOnceWith(null);
+    h.sky.update(); expect(dispose).toHaveBeenCalledOnce(); h.settings.set("sky.model", "lights"); h.sky.update(); expect(h.sky.isLighting()).toBe(true); expect(h.scene.lights).toHaveLength(2);
+  });
+});

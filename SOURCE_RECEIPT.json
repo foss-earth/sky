@@ -1,0 +1,522 @@
+{
+  "schemaVersion": 1,
+  "owner": "foss-earth/sky",
+  "preparedAtUtc": "2026-10-09T19-03-43Z",
+  "status": "SOURCE-ONLY current bytes; checks/history/installed consumers/artifacts/adoption/admission UNRUN",
+  "sourceRevision": "90e23b3ee96f53ec5900afc5991a21fffa58649d",
+  "priorSourceReceipt": "build/source-only/2026-10-09T19-03-43Z/SOURCE_RECEIPT.json.before",
+  "sourceManifestPath": "build/source-only/2026-10-09T19-03-43Z/source-manifest.json",
+  "sourceManifestEncoding": "UTF-8 sorted path JSON array, indent2, trailing LF; ignored outputs and receipt excluded",
+  "sourceManifestSha256": "d56f579581557d07eab5e302f615d1bc717d1870882743d0b27054d31f714a64",
+  "sourceFileCount": 91,
+  "provenancePath": "provenance.json",
+  "provenanceSha256": "1cb4d87f1a3c0a29b9689a0bec517940933125ce7efc2d9706bb15c74ab5376c",
+  "publicExports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./settings": {
+      "types": "./dist/settings.d.ts",
+      "import": "./dist/settings.js"
+    },
+    "./panels": {
+      "types": "./dist/panels/index.d.ts",
+      "import": "./dist/panels/index.js"
+    },
+    "./babylon": {
+      "types": "./dist/babylon/index.d.ts",
+      "import": "./dist/babylon/index.js"
+    },
+    "./styles.css": "./dist/styles/sky.css",
+    "./catalogue": {
+      "types": "./dist/catalogue.d.ts",
+      "import": "./dist/catalogue.js"
+    }
+  },
+  "bins": {},
+  "sourceFiles": [
+    {
+      "path": ".attribution-release.json",
+      "sha256": "c5324ea9476d99afbc5f63e9d5a15d597dd7ee27546499c392046b55fc361131",
+      "bytes": 2045
+    },
+    {
+      "path": ".attribution.json",
+      "sha256": "e4493f3031a5051398339cf9649a8e18efb8ece96f512761d8d145daf8347f7a",
+      "bytes": 491
+    },
+    {
+      "path": ".github/workflows/attribution-check.yml",
+      "sha256": "63349507da9d004752bb0e43c681089dfd9fd6c26bf8047738cb19025f15135e",
+      "bytes": 406
+    },
+    {
+      "path": ".gitignore",
+      "sha256": "dec65f8364c404f33c9d541954dd3b81639ea023b309ca296ea5276acc7c5de1",
+      "bytes": 33
+    },
+    {
+      "path": "AGENTS.md",
+      "sha256": "70267c6399e62e53e0d34dc868e0b3c15714e262a6c2431176650b8bbb48c898",
+      "bytes": 1037
+    },
+    {
+      "path": "CONTRIBUTING.md",
+      "sha256": "1f3a781768f4ee2bb48cd2c82a7b566b06dc99719dab3e32a8172c44487e4152",
+      "bytes": 651
+    },
+    {
+      "path": "LICENSE",
+      "sha256": "0d96a4ff68ad6d4b6f1f30f713b18d5184912ba8dd389f86aa7710db079abcb0",
+      "bytes": 34523
+    },
+    {
+      "path": "NOTICE",
+      "sha256": "323da85db96d02ed0cf48db889efa184037f538f002e868aeeff396ebb44a993",
+      "bytes": 359
+    },
+    {
+      "path": "README.md",
+      "sha256": "40d6a24baae5037de823998bfa0d362182cea64ddddd03e147f70e06ef174f9f",
+      "bytes": 12341
+    },
+    {
+      "path": "SOURCE_LINEAGE.json",
+      "sha256": "7adbd8ce568be8c06c66d90150245f98234d50572ad0fa8aac1b37ce63e376ef",
+      "bytes": 20618
+    },
+    {
+      "path": "SOURCE_SELECTION.json",
+      "sha256": "7a19cb54ae7203530ea4774996678d65ff42612dcc1bbcafbbbf864b8602d829",
+      "bytes": 32038
+    },
+    {
+      "path": "dependency-pins.json",
+      "sha256": "f8a40d8646287d1a34990fc17a38a7dd58d81c201dfecf411ce5e4ce88cdf778",
+      "bytes": 2426
+    },
+    {
+      "path": "docs/proposals/sky.md",
+      "sha256": "dd76b644098bab82edba7e19504a2359cbafd3b7f33c04a64a052eb9d577cf3c",
+      "bytes": 73329
+    },
+    {
+      "path": "docs/sky-lighting-implementation-prompt.md",
+      "sha256": "6641da87098c35979253dbc2c52f6f4b72e86de12f03752f87dacb15ee3fc820",
+      "bytes": 12165
+    },
+    {
+      "path": "docs/source-specifications.md",
+      "sha256": "b27bd7482c7fd5be18ac7aa2e657d0feb9e228937ed1bfbe7f6a2d865e8cbdf2",
+      "bytes": 736
+    },
+    {
+      "path": "docs/validation-tools.md",
+      "sha256": "8afde31d0440aabbdeb6b8a760482cb17702ed3a2c5271da1a461acdb18f8c3c",
+      "bytes": 6852
+    },
+    {
+      "path": "eslint.config.js",
+      "sha256": "8d7a73439fe782a93236766ac43e192d180e6545f59783c68d985b1f97ff851c",
+      "bytes": 596
+    },
+    {
+      "path": "fixtures/composition/LegacyDateTimePanelTests.ts",
+      "sha256": "e3c61846888cd99e45b8f863eff7178636cd9bf11f01347ea2743f1a8125af5b",
+      "bytes": 13985
+    },
+    {
+      "path": "fixtures/composition/LegacySkyRuntimeTests.ts",
+      "sha256": "b03737cd6d01da82448495e473e93c6a50f4914dd4a70daa70c063f2f2d004a9",
+      "bytes": 55009
+    },
+    {
+      "path": "fixtures/consumer/babylon.mjs",
+      "sha256": "e35da12f80a3cc1b3673032aad9738de5211c1ab65056fb10a4bfd715c50feff",
+      "bytes": 2352
+    },
+    {
+      "path": "fixtures/consumer/minimal.mjs",
+      "sha256": "4796eee56c204cd22c8ca0bbdc64a55d261fc69880e9b30e4473f02eb73ce707",
+      "bytes": 1836
+    },
+    {
+      "path": "fixtures/consumer/minimal.ts",
+      "sha256": "c6dd5800f53ef8a2d9ec67e0056a85223e8154a9bfc87da02c304920533248ff",
+      "bytes": 2239
+    },
+    {
+      "path": "fixtures/consumer/tsconfig.json",
+      "sha256": "104d599974228a5dc9d89ccdbe14e0393b18399d0942ddbb8f821f4c16d81b1c",
+      "bytes": 402
+    },
+    {
+      "path": "fixtures/observer.json",
+      "sha256": "a602a2ccd97d85dcdf948c26cb624e839c74359dd992208912f96efe93ba36f5",
+      "bytes": 316
+    },
+    {
+      "path": "fixtures/validation/skyModelEntry.ts",
+      "sha256": "31add94dcc53b0fdac09a55834dd1c9aa5888894f1592027db8406ce24f71ed4",
+      "bytes": 221
+    },
+    {
+      "path": "fixtures/validation/skyModelHost.ts",
+      "sha256": "cb60fe3845bf0bf5d60f726210f40e26e5d947fd113e39c63805940631061189",
+      "bytes": 352
+    },
+    {
+      "path": "fixtures/validation/skyRenderEntry.ts",
+      "sha256": "a751a2d3be95735bee847f007a140791e910d247bca38c75435ed6af99bf4dde",
+      "bytes": 395
+    },
+    {
+      "path": "fixtures/validation/skyRenderHost.ts",
+      "sha256": "9d44bdbc4887de064a769e2d1170b8e2539d2b0653f0015e56c4ea5c653af527",
+      "bytes": 4507
+    },
+    {
+      "path": "package.json",
+      "sha256": "1cb9b57f15058dece789c24653a43be5e554d5a2012aadc837b0c869efa64518",
+      "bytes": 3249
+    },
+    {
+      "path": "provenance.json",
+      "sha256": "1cb4d87f1a3c0a29b9689a0bec517940933125ce7efc2d9706bb15c74ab5376c",
+      "bytes": 72872
+    },
+    {
+      "path": "scripts/check-installed-artifact.mjs",
+      "sha256": "be620a06d21184d1b48ff3cbd096e717650b1ffea78183c0657bcc71d11b5a23",
+      "bytes": 8555
+    },
+    {
+      "path": "scripts/copy-assets.mjs",
+      "sha256": "af65f43bfc94bafccfa48119cd5d8631d3b56a0a8a29470de4fc3320245f6cab",
+      "bytes": 245
+    },
+    {
+      "path": "scripts/lib/outputDirectory.mjs",
+      "sha256": "8478a946b95ffc2bce0252f6f4573abe25054ea309b370d5e13e35be4c37a2f3",
+      "bytes": 1400
+    },
+    {
+      "path": "scripts/outputDirectory.mjs",
+      "sha256": "d97ba4dd088184cdadb03395afbaa650f7c66c32a2b017fefe74c14a036a0d31",
+      "bytes": 758
+    },
+    {
+      "path": "scripts/sky/build-star-catalogue.mjs",
+      "sha256": "fe0a571b68f15e0dac75dd0a3d0f8f69bd6f1f4cf290f9c1a166873bc4ad3535",
+      "bytes": 3635
+    },
+    {
+      "path": "scripts/sky/extract-spa-terms.mjs",
+      "sha256": "28ba16753d6e7b2a9b8033cd67ae2d244ad7b0520d143332a31c89c7c10afa26",
+      "bytes": 5288
+    },
+    {
+      "path": "scripts/validation/ports.ts",
+      "sha256": "4b6468e2019892a63b7b2e1febf1bafee8f60a093fcf8b855c4de162f78a7fff",
+      "bytes": 1744
+    },
+    {
+      "path": "scripts/validation/sky-model.mjs",
+      "sha256": "75040755ff30de3437db40998131a4c159e1f69fc10db3a122dc7e63dc1c341b",
+      "bytes": 6500
+    },
+    {
+      "path": "scripts/validation/sky-render.mjs",
+      "sha256": "c61ad098746a30d70875fbe4a6f3aa11833d48ec23b375e95d4a7a95cfc96fa7",
+      "bytes": 7747
+    },
+    {
+      "path": "scripts/validation/skyModelCheck.ts",
+      "sha256": "58b08715c5822bea1604a30e60976861732eb4d8dd00e7ce828b5ab7e8c68b91",
+      "bytes": 20122
+    },
+    {
+      "path": "scripts/validation/skyRenderCheck.ts",
+      "sha256": "e2e9fd24034965540219de55752c9dde6ab9260d6a21d0c59c7a6a93ae637e50",
+      "bytes": 24214
+    },
+    {
+      "path": "scripts/validation/toolSources.mjs",
+      "sha256": "13ad312739a07607274dee59031442508f4804d5da50e8305556838f071819a7",
+      "bytes": 3929
+    },
+    {
+      "path": "scripts/validation/tsconfig.json",
+      "sha256": "7df785c8636ce97d3dd593244421b458cf73c6f6aab2d6c77014bb714d82e1df",
+      "bytes": 524
+    },
+    {
+      "path": "src/atmosphere.test.ts",
+      "sha256": "197c205380ee3b6b1835520b1503febb8a69625617ce7038dd11834f580cbb36",
+      "bytes": 10407
+    },
+    {
+      "path": "src/atmosphere.ts",
+      "sha256": "b5f0e0a7fa78934af80081189a8ee57dcf7dbb9fe4be54c4626f626c56f5feab",
+      "bytes": 24356
+    },
+    {
+      "path": "src/babylon/cleanup.ts",
+      "sha256": "c53886de7c5df0d78d807b58a1f2c7c2940091fdf6be7ff5c7664f62728d5cbd",
+      "bytes": 493
+    },
+    {
+      "path": "src/babylon/createGroundLightProbe.test.ts",
+      "sha256": "ec99f9448d4735596ce83849fda3f60b4ebc2e6ef4fc8c3a9d46d6224e69cab9",
+      "bytes": 6199
+    },
+    {
+      "path": "src/babylon/createGroundLightProbe.ts",
+      "sha256": "19c6ab941b87bb7995b467a664201714bd27e21a3d8bab99ea61ce1dc7ba13ba",
+      "bytes": 9348
+    },
+    {
+      "path": "src/babylon/createLightPoints.test.ts",
+      "sha256": "90504d5b6f7d49346ddcc74648b6ecae5e497555e96b752ad0d6e0891b05eb5d",
+      "bytes": 5064
+    },
+    {
+      "path": "src/babylon/createLightPoints.ts",
+      "sha256": "31f7c7a24986ae7f93053408d1d9990b035c9de910a3b04bad9d2faf6d95c5a7",
+      "bytes": 9619
+    },
+    {
+      "path": "src/babylon/createNightLights.test.ts",
+      "sha256": "f572a7bfddd658a1858ab5c096c8f0c6cf5b7c56722829410674865ab912a258",
+      "bytes": 20907
+    },
+    {
+      "path": "src/babylon/createNightLights.ts",
+      "sha256": "ea21f4c7ea2e7517ceba7e98ad2579315db6c0ae95186291d0c8f8f077f9cf8a",
+      "bytes": 18592
+    },
+    {
+      "path": "src/babylon/createSkyRuntime.ts",
+      "sha256": "00c227cc6c4ead855cc98f621fe70cef92594e34f4ac39b6fa38953d0280500a",
+      "bytes": 46401
+    },
+    {
+      "path": "src/babylon/createStarField.ts",
+      "sha256": "4c3cbca0bd450b364240932f4924f0c8d1138f44db6db4b6d63b56ec13d31af9",
+      "bytes": 10823
+    },
+    {
+      "path": "src/babylon/index.ts",
+      "sha256": "a90aae1637b95268e6843d6931c81695b40a5cbd1d32cc8d7bcf7b5020386a25",
+      "bytes": 261
+    },
+    {
+      "path": "src/babylon/ports.ts",
+      "sha256": "18f8f64ab4cda36f1235494800bd6228a8dfe00933fa43ccd3aa6ae924f932e9",
+      "bytes": 4330
+    },
+    {
+      "path": "src/babylon/readings.ts",
+      "sha256": "79bb50887e590a87589e7ff762c10c482e44a7451d4166d05f5eda167678fb6a",
+      "bytes": 12028
+    },
+    {
+      "path": "src/catalogue.ts",
+      "sha256": "516872bb69a232b06fa341d55edd5e2ad4f570c23f55bb80da97ba3b6d89d77a",
+      "bytes": 166
+    },
+    {
+      "path": "src/index.ts",
+      "sha256": "69b49b630b2dc925f2bc7ba8eb4b793641f8554ba67b6609038b654150be76b2",
+      "bytes": 3196
+    },
+    {
+      "path": "src/lunarPosition.test.ts",
+      "sha256": "335f94b9dcdbb60ebf157a5587e26fe1b83dadc2c10031e75b7ee1eb73d4c566",
+      "bytes": 5021
+    },
+    {
+      "path": "src/lunarPosition.ts",
+      "sha256": "a07450e85bfd6485335c804db6c301beb12f9146b2c3e8a23aaeaa529edfd29a",
+      "bytes": 13666
+    },
+    {
+      "path": "src/nightLights.test.ts",
+      "sha256": "ba00cd2945fb5b59348a6556cb0ad7fde731a292177a1858793f5de55bd67f37",
+      "bytes": 13053
+    },
+    {
+      "path": "src/nightLights.ts",
+      "sha256": "3ecfa8a97d0b5c659d10cb4d562f52da3e9ebdf4c5ebbcf195836a9f2b23fde2",
+      "bytes": 18884
+    },
+    {
+      "path": "src/panels/dateTimePanel.ts",
+      "sha256": "14525e321f3d760164847764a508c74a4de6373576d17a6c9580e673e338887d",
+      "bytes": 23477
+    },
+    {
+      "path": "src/panels/index.ts",
+      "sha256": "3fdb0efd5c2206ab57b487f577205087e99908732328732b9524868993551aac",
+      "bytes": 95
+    },
+    {
+      "path": "src/panels/ports.ts",
+      "sha256": "e0db4c0ed68372b41758691660c51a091183ac79cc09e683e9aefe7fe678d7e4",
+      "bytes": 2783
+    },
+    {
+      "path": "src/panels/skyPanel.ts",
+      "sha256": "4dd393d64a5c5727b4831179fa72d96e5a028c77df719baa734081daa3ee38b4",
+      "bytes": 5112
+    },
+    {
+      "path": "src/settings.ts",
+      "sha256": "ea4acc2e58f421a017e787a66ae03e1f7199b8453841fed8c6400bd14cc35067",
+      "bytes": 35912
+    },
+    {
+      "path": "src/skyState.test.ts",
+      "sha256": "e9a5d15b5300602db98b6996d60149431539039c71291efca6a794fa696fd114",
+      "bytes": 15414
+    },
+    {
+      "path": "src/skyState.ts",
+      "sha256": "0797f84f353a1a2a7e7ec4cea7dbd41d7c86dd1f8a828616821ca1bee68b5385",
+      "bytes": 37112
+    },
+    {
+      "path": "src/solarDay.test.ts",
+      "sha256": "576180ecd769ee0f984fd512ede150834801409bff52003896546764502c0ebe",
+      "bytes": 6549
+    },
+    {
+      "path": "src/solarDay.ts",
+      "sha256": "1d8d4f36d9f7f767f1a7066ecd519e177eb762f119c54bc449a19dee58e1540c",
+      "bytes": 8831
+    },
+    {
+      "path": "src/solarPosition.test.ts",
+      "sha256": "43ea06444681821891a67e5580cfee7e5239dd15a54d756382441218815a4003",
+      "bytes": 6656
+    },
+    {
+      "path": "src/solarPosition.ts",
+      "sha256": "fea47eb5a557e2d44df5f3edef007693384dd61fc2ad30003bca122e27066248",
+      "bytes": 14425
+    },
+    {
+      "path": "src/solarPositionTerms.ts",
+      "sha256": "c333c9c2121496131cf3811f90a11a66fd379baaff1387de29b962d981cb68a7",
+      "bytes": 8411
+    },
+    {
+      "path": "src/starCatalogue.ts",
+      "sha256": "e486cfc3be312f4bb08a291c8dc035ea6b3c96efa8f3d9f4eae8691f3dcd8864",
+      "bytes": 204323
+    },
+    {
+      "path": "src/stars.test.ts",
+      "sha256": "8051ba6fde902a0cb0b3cf218a19c6a36a5fbc1d6749ebfd26a25db6d09346e5",
+      "bytes": 4667
+    },
+    {
+      "path": "src/stars.ts",
+      "sha256": "b0288045e09c0d824352c64922fa66475b16cf8af912acbbf699e17a035c2e09",
+      "bytes": 8337
+    },
+    {
+      "path": "src/styles/sky.css",
+      "sha256": "b7208c552fb3ad186137177fffcffcbe81617f78be5fc2bcedcefba4c20eb298",
+      "bytes": 267
+    },
+    {
+      "path": "src/time.ts",
+      "sha256": "7aa934546cdc5f3c7403cd1e49dd3a8a2d09de1f361d7a4dd7ad6e20c6b3f9dd",
+      "bytes": 4236
+    },
+    {
+      "path": "src/units.ts",
+      "sha256": "65dee9aae2754717729e14eb288a8ce5e0d7b79bce8451de6018459170a040d4",
+      "bytes": 176
+    },
+    {
+      "path": "tests/host-settings.ts",
+      "sha256": "d7f162162df4f8d527b77068301cbfd58ef52ed170164c580c5f3aa55abc3b62",
+      "bytes": 786
+    },
+    {
+      "path": "tests/observer.test.ts",
+      "sha256": "e51be235b40754a4f85987f711ce2416cba5951a252b834be1a3399ff079d89b",
+      "bytes": 1096
+    },
+    {
+      "path": "tests/package-consumer.mjs",
+      "sha256": "6b25e19ce5cdd96cb53eff01386fde8b6eb1bd8ec80c73be033878c8592e2bc2",
+      "bytes": 120
+    },
+    {
+      "path": "tests/panels.test.ts",
+      "sha256": "22689119428ed512d3920094be3e1e3ecc31eb9050325c4f0b51df972be324ff",
+      "bytes": 7705
+    },
+    {
+      "path": "tests/readings.test.ts",
+      "sha256": "b9e28f38b207bcdc8f4fe015f9efbf2d63143b47a4517a2adfa406743c1ff5eb",
+      "bytes": 4634
+    },
+    {
+      "path": "tests/resource-disposal.test.ts",
+      "sha256": "c8fd02e2beb03bf52e5f900cdcaae67c927ad2fe32ffd56c0a59d907b53b13c5",
+      "bytes": 4968
+    },
+    {
+      "path": "tests/runtime-ports.test.ts",
+      "sha256": "e4d0a9ea2057d02e803b15a1c66425076230ff0b1196091530e380381db33ad7",
+      "bytes": 11171
+    },
+    {
+      "path": "tests/validation-tools.test.ts",
+      "sha256": "44af079b53a8d8beff142ad3614d3e2ee4cc544c4108cbfde708bcf5ed3bc8ca",
+      "bytes": 3087
+    },
+    {
+      "path": "tsconfig.json",
+      "sha256": "76bbb85969b1b1d0ed90946dac6dc34504347e5e0cf7b2dc090fa6278b6150e6",
+      "bytes": 626
+    },
+    {
+      "path": "vitest.config.ts",
+      "sha256": "7f90354c3279c0c2211c7c4be9f74558337d69f49370149d2fe2037cc8ffd2db",
+      "bytes": 500
+    }
+  ],
+  "frozenFoundation": null,
+  "sharedCi": {
+    "revision": "9e046dd482e0229dc7c7b2d71b079d5905664656",
+    "archiveSha256": "450ede699f55f9b9c78146eadb73de7c6297e56553e7d7f9e5b164786a7beb24",
+    "policySha256": "9ca88bf5861685e22e65e5f39fa65b05faaf9c218875fccbecce1b9f2dca5bd3",
+    "callerSha256": "63349507da9d004752bb0e43c681089dfd9fd6c26bf8047738cb19025f15135e",
+    "installedConformance": null,
+    "fullIntendedRefAudit": null,
+    "actualRemoteAdmissionVerified": false,
+    "docsOnlyMetadataSkipped": false
+  },
+  "checksExecuted": [],
+  "currentArtifact": null,
+  "acceptedArtifacts": [],
+  "actualConsumerAdoption": null,
+  "rollback": "Canonical original application remains live; frozen prior artifacts and earlier exact source receipts retained. New source has not replaced or retired any consumer.",
+  "outstandingBlockers": [
+    "granted bounded owner and actual public-only consumer checks",
+    "exact replacement prerequisites",
+    "source/API/CSS link/asset compatibility",
+    "expanded clean lineage and actual complete intended publication scopes",
+    "actual installed CI conformance",
+    "final source/archive/export seals",
+    "actual app adoption",
+    "coordinator public transport and remote admission"
+  ],
+  "policySentence": "YOU CANNOT HAVE AI AS A CO-AUTHOR, OR YOUR CONTRIBUTIONS WILL BE REJECTED."
+}

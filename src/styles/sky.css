@@ -1,0 +1,12 @@
+/* Date and time: two dials in a paragraph grid, side by side where the tab is wide enough and one under the other where not. */
+.foss-earth-sky-tab,
+.foss-earth-date-time-tab {
+  display: grid;
+  gap: 12px;
+}
+
+.foss-earth-date-time {
+  display: grid;
+  gap: 8px;
+}
+

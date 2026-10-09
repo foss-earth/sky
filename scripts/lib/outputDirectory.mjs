@@ -12,6 +12,7 @@ const root = fileURLToPath(new URL("../../", import.meta.url));
  * second get -2, -3…: every run is kept, none overwritten.
  */
 export function newOutputDirectory(...where) {
+  if (where.some(part => typeof part !== "string" || path.isAbsolute(part) || part.split(/[\\/]/).some(piece => piece === ".."))) throw new Error("Sky validation output must remain inside this owner build/.");
   const now = new Date();
   const pad = value => String(value).padStart(2, "0");
   const stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_`

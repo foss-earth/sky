@@ -5,28 +5,39 @@
  * A retained run is copied to validation/evidence/sky/.
  * Usage: node scripts/validation/sky-model.mjs
  */
-import { readFile, writeFile } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { createHash } from "node:crypto";
-import { build } from "vite";
 import { newOutputDirectory } from "../lib/outputDirectory.mjs";
+import { sourceDigests, publicModule, ownerResolutionGuard } from "./toolSources.mjs";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const out = newOutputDirectory("validation", "sky-model");
+const sources = await sourceDigests([
+  "scripts/validation/sky-model.mjs",
+  "scripts/validation/skyModelCheck.ts",
+  "scripts/validation/ports.ts",
+  "scripts/validation/toolSources.mjs",
+  "fixtures/validation/skyModelEntry.ts",
+  "fixtures/validation/skyModelHost.ts",
+  "scripts/lib/outputDirectory.mjs",
+  "SOURCE_SELECTION.json",
+  "provenance.json"
+], [
+  "@foss-earth/sky",
+  "@foss-earth/sky/settings",
+  "@foss-earth/sky/catalogue",
+  "@foss-earth/engine",
+  "vite"
+]);
+
+const { build } = await import(pathToFileURL(await publicModule("vite")).href);
 await build({ configFile: false, root, logLevel: "warn", publicDir: false,
+  plugins: [ownerResolutionGuard()],
   build: { outDir: path.join(out, "bundle"), emptyOutDir: false, minify: false, lib: {
-    entry: path.join(root, "scripts/validation/skyModelCheck.ts"), formats: ["es"], fileName: () => "check.mjs",
+    entry: path.join(root, "fixtures/validation/skyModelEntry.ts"), formats: ["es"], fileName: () => "check.mjs",
   } },
 });
-const sources = {};
-for (const name of [
-  "scripts/validation/sky-model.mjs", "scripts/validation/skyModelCheck.ts", "src/sky/atmosphere.ts", "src/sky/skyState.ts",
-  "src/sky/solarPosition.ts", "src/sky/solarPositionTerms.ts", "src/sky/lunarPosition.ts", "src/sky/stars.ts", "src/sky/starCatalogue.ts",
-  "src/settings/catalogue/sky.ts",
-]) {
-  sources[name] = createHash("sha256").update(await readFile(path.join(root, name))).digest("hex");
-}
 const { run } = await import(pathToFileURL(path.join(out, "bundle/check.mjs")).href);
 const record = { tool: "scripts/validation/sky-model.mjs", ranAt: new Date().toISOString(), node: process.version, sources, ...run() };
 await writeFile(path.join(out, "sky-model.json"), `${JSON.stringify(record, null, 2)}\n`);

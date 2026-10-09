@@ -1,0 +1,602 @@
+{
+  "schemaVersion": 1,
+  "package": "@foss-earth/sky",
+  "sourceRepository": "https://github.com/foss-earth/foss-earth.github.io",
+  "sourceRevision": "90e23b3ee96f53ec5900afc5991a21fffa58649d",
+  "sourceTree": "c68d1fabd9fce19e255ea89c65502666d0f74a27",
+  "status": "SOURCE-ONLY complete current selection includes primary Document/prose increment plus all four original Sky validation tools and owner output helper; all checks and experiments UNRUN.",
+  "mappedPaths": [
+    {
+      "source": "src/sky/solarPosition.ts",
+      "destination": "src/solarPosition.ts",
+      "sourceBlob": "c563b4620fb0dab849a31714fb0ec88969bcd773",
+      "sourceSha256": "00bb35e22f83fdd030d5f6f437cf19dd060694bad55b239de4d2fb785e2c782b",
+      "destinationSha256": "fea47eb5a557e2d44df5f3edef007693384dd61fc2ad30003bca122e27066248"
+    },
+    {
+      "source": "src/sky/solarDay.ts",
+      "destination": "src/solarDay.ts",
+      "sourceBlob": "6de2345eafcaa305d60c99a1556ddfb81ad8787e",
+      "sourceSha256": "fc60e60f37fdf67b87e8de23c07d96038da86dbe2bd19a4ba3caa1c3662474e0",
+      "destinationSha256": "1d8d4f36d9f7f767f1a7066ecd519e177eb762f119c54bc449a19dee58e1540c"
+    },
+    {
+      "source": "src/sky/solarPositionTerms.ts",
+      "destination": "src/solarPositionTerms.ts",
+      "sourceBlob": "8b3e9a21892e6b9c686aa69edc4c991923cb1539",
+      "sourceSha256": "c333c9c2121496131cf3811f90a11a66fd379baaff1387de29b962d981cb68a7",
+      "destinationSha256": "c333c9c2121496131cf3811f90a11a66fd379baaff1387de29b962d981cb68a7"
+    },
+    {
+      "source": "src/sky/lunarPosition.ts",
+      "destination": "src/lunarPosition.ts",
+      "sourceBlob": "934011135c9d724873d2199dbd85135d3cb521d8",
+      "sourceSha256": "4f476b28088fe7cedb1a10ffdd3d270a74b1ae759204b8d60da62d846790b621",
+      "destinationSha256": "a07450e85bfd6485335c804db6c301beb12f9146b2c3e8a23aaeaa529edfd29a"
+    },
+    {
+      "source": "src/sky/atmosphere.ts",
+      "destination": "src/atmosphere.ts",
+      "sourceBlob": "10f6c59d23cd44b11faa86dbd601bce8bed5dd93",
+      "sourceSha256": "b5f0e0a7fa78934af80081189a8ee57dcf7dbb9fe4be54c4626f626c56f5feab",
+      "destinationSha256": "b5f0e0a7fa78934af80081189a8ee57dcf7dbb9fe4be54c4626f626c56f5feab"
+    },
+    {
+      "source": "src/sky/nightLights.ts",
+      "destination": "src/nightLights.ts",
+      "sourceBlob": "965a1dc9f6d3df790ca08a325379235aa994cd3a",
+      "sourceSha256": "6f72cb2b712247372d8bb0a166d8c98afb867d8192f47bd1968f8fbf4376736a",
+      "destinationSha256": "3ecfa8a97d0b5c659d10cb4d562f52da3e9ebdf4c5ebbcf195836a9f2b23fde2"
+    },
+    {
+      "source": "src/sky/stars.ts",
+      "destination": "src/stars.ts",
+      "sourceBlob": "ce30d52df8d0a10272112cd1e60de35b27fb0864",
+      "sourceSha256": "534435e477e762f7028aa456aae015c0081e49a8bc54e7abc5a583fa7a9b712d",
+      "destinationSha256": "b0288045e09c0d824352c64922fa66475b16cf8af912acbbf699e17a035c2e09"
+    },
+    {
+      "source": "src/sky/starCatalogue.ts",
+      "destination": "src/starCatalogue.ts",
+      "sourceBlob": "6d078ec15a3d0a08e7a63368123370dd6c8f82fc",
+      "sourceSha256": "e486cfc3be312f4bb08a291c8dc035ea6b3c96efa8f3d9f4eae8691f3dcd8864",
+      "destinationSha256": "e486cfc3be312f4bb08a291c8dc035ea6b3c96efa8f3d9f4eae8691f3dcd8864"
+    },
+    {
+      "source": "src/sky/solarPosition.test.ts",
+      "destination": "src/solarPosition.test.ts",
+      "sourceBlob": "70f9477e1f66324bddecd59aca9f6fb4887a972d",
+      "sourceSha256": "da50a9e51967527a27e57dfdb0e7c795a218e7348fe82cee57d42901bca33388",
+      "destinationSha256": "43ea06444681821891a67e5580cfee7e5239dd15a54d756382441218815a4003"
+    },
+    {
+      "source": "src/sky/solarDay.test.ts",
+      "destination": "src/solarDay.test.ts",
+      "sourceBlob": "d95f0d764236b8911d44ca3625f096a339575bce",
+      "sourceSha256": "6691d7703a5c3aaf79a6a7052a32c3bbe8916fbedcd6feb33de7f29c3e0b19c8",
+      "destinationSha256": "576180ecd769ee0f984fd512ede150834801409bff52003896546764502c0ebe"
+    },
+    {
+      "source": "src/sky/lunarPosition.test.ts",
+      "destination": "src/lunarPosition.test.ts",
+      "sourceBlob": "902824595687de5ace38943e12317bd9d4968826",
+      "sourceSha256": "396f70a67c1687e61710a7a3e534a4ca98890b0d2b023a87084e6a287f61662e",
+      "destinationSha256": "335f94b9dcdbb60ebf157a5587e26fe1b83dadc2c10031e75b7ee1eb73d4c566"
+    },
+    {
+      "source": "src/sky/atmosphere.test.ts",
+      "destination": "src/atmosphere.test.ts",
+      "sourceBlob": "df516227a20c94288653230d81a92187d1bcf9a4",
+      "sourceSha256": "c2d514aa78d171cdbc695aa6f0795575d7d3d31ed58626d48cbcc10e2f2bd3d2",
+      "destinationSha256": "197c205380ee3b6b1835520b1503febb8a69625617ce7038dd11834f580cbb36"
+    },
+    {
+      "source": "src/sky/nightLights.test.ts",
+      "destination": "src/nightLights.test.ts",
+      "sourceBlob": "9c910c64a03c8bcd5f61e79b0d57929ff273e4d1",
+      "sourceSha256": "80683b71af38af66f0aaa004d414fe036b4e8d848d5ff33e0d9939be34c0d3e4",
+      "destinationSha256": "ba00cd2945fb5b59348a6556cb0ad7fde731a292177a1858793f5de55bd67f37"
+    },
+    {
+      "source": "src/sky/stars.test.ts",
+      "destination": "src/stars.test.ts",
+      "sourceBlob": "d182ea6955e8cc1463e2a1d65a9830287cf7dbae",
+      "sourceSha256": "7c99d650cb8a4d9d59b700b3cfa6997612963a8da0ead03bb9a90210f878de9d",
+      "destinationSha256": "8051ba6fde902a0cb0b3cf218a19c6a36a5fbc1d6749ebfd26a25db6d09346e5"
+    },
+    {
+      "source": "src/sky/skyState.ts",
+      "destination": "src/skyState.ts",
+      "sourceBlob": "cab6a1c30858e1626a3a3af003c3649e2528a7c2",
+      "sourceSha256": "805173d21e2c4baae76468fceedf2ca53f34a1488f2f9c5bf8d8fdd1708358f7",
+      "destinationSha256": "0797f84f353a1a2a7e7ec4cea7dbd41d7c86dd1f8a828616821ca1bee68b5385"
+    },
+    {
+      "source": "src/sky/index.ts",
+      "destination": "src/index.ts",
+      "sourceBlob": "6f23f3d5a1034b7b55bd62744720ef390d1fe689",
+      "sourceSha256": "319019041763ecf605855cf8faada03456b6eaf5ecea3b591253c1bd5fa8666c",
+      "destinationSha256": "69b49b630b2dc925f2bc7ba8eb4b793641f8554ba67b6609038b654150be76b2"
+    },
+    {
+      "source": "src/settings/catalogue/sky.ts",
+      "destination": "src/settings.ts",
+      "sourceBlob": "d05109664d0e3d54c65117cf507d34026f8d7781",
+      "sourceSha256": "40e381c3f819d1447a63d97367ea179999153efe5a74b00b280d81acc6755014",
+      "destinationSha256": "ea4acc2e58f421a017e787a66ae03e1f7199b8453841fed8c6400bd14cc35067"
+    },
+    {
+      "source": "src/sky/skyState.test.ts",
+      "destination": "src/skyState.test.ts",
+      "sourceBlob": "f5d0c370abfd7b3dd475bf83841d32f065463ff3",
+      "sourceSha256": "a16e456bbe237f3fafeed49f0777381d2cb05a44f19321121703ef0657b0ea59",
+      "destinationSha256": "e9a5d15b5300602db98b6996d60149431539039c71291efca6a794fa696fd114"
+    },
+    {
+      "source": "LICENSE",
+      "destination": "LICENSE",
+      "sourceBlob": "be3f7b28e564e7dd05eaf59d64adba1a4065ac0e",
+      "sourceSha256": "0d96a4ff68ad6d4b6f1f30f713b18d5184912ba8dd389f86aa7710db079abcb0",
+      "destinationSha256": "0d96a4ff68ad6d4b6f1f30f713b18d5184912ba8dd389f86aa7710db079abcb0"
+    },
+    {
+      "source": "NOTICE",
+      "destination": "NOTICE",
+      "sourceBlob": "cd6a1d92cce505eaeea37e9726a2f98a0a61a12d",
+      "sourceSha256": "323da85db96d02ed0cf48db889efa184037f538f002e868aeeff396ebb44a993",
+      "destinationSha256": "323da85db96d02ed0cf48db889efa184037f538f002e868aeeff396ebb44a993"
+    },
+    {
+      "source": "src/engine/babylon/createGroundLightProbe.ts",
+      "destination": "src/babylon/createGroundLightProbe.ts",
+      "sourceBlob": "7b162e5f2240801296c8a7b188ba54bc25b1380d",
+      "sourceSha256": "195d6ae01c6ec4a8ec89260b78427d698d62650bb83d6036fd2ccc7bff88aadc",
+      "destinationSha256": "19c6ab941b87bb7995b467a664201714bd27e21a3d8bab99ea61ce1dc7ba13ba"
+    },
+    {
+      "source": "src/engine/babylon/createStarField.ts",
+      "destination": "src/babylon/createStarField.ts",
+      "sourceBlob": "0b11ec727ecaedd7a138f4aa005adb3c727db832",
+      "sourceSha256": "c11ba29a624162d40c90c0b8d4209e93c73c94ce32dd5741885b1e7a5c1f2687",
+      "destinationSha256": "4c3cbca0bd450b364240932f4924f0c8d1138f44db6db4b6d63b56ec13d31af9"
+    },
+    {
+      "source": "src/engine/babylon/createLightPoints.ts",
+      "destination": "src/babylon/createLightPoints.ts",
+      "sourceBlob": "6de8d7118eb988ddd8e64c50c20a15e0e8cf1fc3",
+      "sourceSha256": "92f30652807563ae7fb7ffce5463d22139a8110da548f72dc6eb97a109681328",
+      "destinationSha256": "31f7c7a24986ae7f93053408d1d9990b035c9de910a3b04bad9d2faf6d95c5a7"
+    },
+    {
+      "source": "src/engine/babylon/imagery/terrainLightPlugin.ts",
+      "destination": "src/babylon/ports.ts",
+      "sourceBlob": "f141920136fbaf48482cf28fc5bdec7f7d7c9829",
+      "sourceSha256": "fc5f6e50ad6be7ce8c5d12a14df238a4f666548266a218689672cfae842aff5e",
+      "destinationSha256": "18f8f64ab4cda36f1235494800bd6228a8dfe00933fa43ccd3aa6ae924f932e9"
+    },
+    {
+      "source": "src/engine/babylon/createNightLights.ts",
+      "destination": "src/babylon/createNightLights.ts",
+      "sourceBlob": "fa18ce289e7fcd8223778adf83d8b78cbcb6f659",
+      "sourceSha256": "f39349f776214d5336365e0d20e04454529ec1d139462a033c8af148738280ef",
+      "destinationSha256": "ea21f4c7ea2e7517ceba7e98ad2579315db6c0ae95186291d0c8f8f077f9cf8a"
+    },
+    {
+      "source": "src/engine/babylon/createSkyRuntime.ts",
+      "destination": "src/babylon/createSkyRuntime.ts",
+      "sourceBlob": "f9ff41eb7667a7e5cfbfbf003048fdd2a208e584",
+      "sourceSha256": "0cd09bea0c35d585b7126a9dc78fe028ffbf6b881524c2f8029ceadcb36026c8",
+      "destinationSha256": "00c227cc6c4ead855cc98f621fe70cef92594e34f4ac39b6fa38953d0280500a"
+    },
+    {
+      "source": "src/engine/babylon/createGroundLightProbe.test.ts",
+      "destination": "src/babylon/createGroundLightProbe.test.ts",
+      "sourceBlob": "a6cb2f3dbcd9be75cf61d518133c8d4582d2c5af",
+      "sourceSha256": "6e19fde8a74502b2fb9e5d7445ca31e33860bc1f22b6b68ef2b797ac4a7dcc3f",
+      "destinationSha256": "ec99f9448d4735596ce83849fda3f60b4ebc2e6ef4fc8c3a9d46d6224e69cab9"
+    },
+    {
+      "source": "src/engine/babylon/createLightPoints.test.ts",
+      "destination": "src/babylon/createLightPoints.test.ts",
+      "sourceBlob": "ffaf4fa3b0c69c7734bc22c9e3596668e1acb680",
+      "sourceSha256": "a96a1717dd4ffe0d4337ddcebbedb0bdd8da7ade7efb63602d4036ee88272cd3",
+      "destinationSha256": "90504d5b6f7d49346ddcc74648b6ecae5e497555e96b752ad0d6e0891b05eb5d"
+    },
+    {
+      "source": "src/shell/dial.ts",
+      "destination": "src/panels/ports.ts",
+      "sourceBlob": "94730d54b724fcc785e73f8c384282423d1fb20a",
+      "sourceSha256": "1e6eb4ecb491cf468ccf8a9b16fda19da3b0a4372d2fadcc1765346b1c7934ca",
+      "destinationSha256": "e0db4c0ed68372b41758691660c51a091183ac79cc09e683e9aefe7fe678d7e4"
+    },
+    {
+      "source": "src/shell/dateTimePanel.ts",
+      "destination": "src/time.ts",
+      "sourceBlob": "48f26666bdd065a8bf5e6657d9069f85705121d3",
+      "sourceSha256": "fca7351115dc5bb35a7497a5080f85b5564287732658c0e40df7d178328146cf",
+      "destinationSha256": "38c07f0fe32c88c2d9812b182e957dd007ad669ceba83b099a7a6da5d8ab3385"
+    },
+    {
+      "source": "src/shell/dateTimePanel.ts",
+      "destination": "src/panels/dateTimePanel.ts",
+      "sourceBlob": "48f26666bdd065a8bf5e6657d9069f85705121d3",
+      "sourceSha256": "fca7351115dc5bb35a7497a5080f85b5564287732658c0e40df7d178328146cf",
+      "destinationSha256": "fe77da62ed3e81b5418a30f8fa1ab6b2c4fecb337bce9e82bac984f8da63d680"
+    },
+    {
+      "source": "src/shell/skyPanel.ts",
+      "destination": "src/panels/skyPanel.ts",
+      "sourceBlob": "ddf6fb17f2348bf77f19e70df8cdd2a48d942f1f",
+      "sourceSha256": "ad90e6093b3588e3e30b3773a334a483afa0de65b6f73d63ddf4f07254d7ee8a",
+      "destinationSha256": "4dd393d64a5c5727b4831179fa72d96e5a028c77df719baa734081daa3ee38b4"
+    },
+    {
+      "source": "src/styles/hud.css",
+      "destination": "src/styles/sky.css",
+      "sourceBlob": "cbd0c99b22835493f0ee659a73bdc89bd4258f7b",
+      "sourceSha256": "cc221b7efd23f13037023bbc095ecdfeb150f5cd9cd959ec49c5a26f6399dff4",
+      "destinationSha256": "b7208c552fb3ad186137177fffcffcbe81617f78be5fc2bcedcefba4c20eb298"
+    },
+    {
+      "source": "src/engine/babylon/createNightLights.test.ts",
+      "destination": "src/babylon/createNightLights.test.ts",
+      "sourceBlob": "782af5ed64f827a38454b41f05f67d24f8822ca0",
+      "sourceSha256": "1e1b45d21755ef463e2caaf5bec15de8960b3c9c881488467cab26c9118be4bd",
+      "destinationSha256": "f572a7bfddd658a1858ab5c096c8f0c6cf5b7c56722829410674865ab912a258"
+    },
+    {
+      "source": "scripts/sky/build-star-catalogue.mjs",
+      "destination": "scripts/sky/build-star-catalogue.mjs",
+      "sourceBlob": "59fc5800206a1b4475792dcbee9cf5ab70a836e4",
+      "sourceSha256": "59c6a7e7a4392e07feb016b4e116c0b0ba42ddf6b998550af4ce815ad0ead75a",
+      "destinationSha256": "fe0a571b68f15e0dac75dd0a3d0f8f69bd6f1f4cf290f9c1a166873bc4ad3535"
+    },
+    {
+      "source": "scripts/sky/extract-spa-terms.mjs",
+      "destination": "scripts/sky/extract-spa-terms.mjs",
+      "sourceBlob": "458729c047753ce09138ee54ac21014d8bc51457",
+      "sourceSha256": "113ae73ab3b5248cd6f89fc184a5c3ad0d78411752dc779f6d2404dad6533ade",
+      "destinationSha256": "28ba16753d6e7b2a9b8033cd67ae2d244ad7b0520d143332a31c89c7c10afa26"
+    },
+    {
+      "source": "src/engine/babylon/createBabylonRuntime.ts",
+      "destination": "src/babylon/readings.ts",
+      "sourceBlob": "18014094e72e2642356913f288445ec75c84851c",
+      "sourceSha256": "d144d8962f4539ab226fcbea892e5d0f92307bd8592f4345c06a49ec0e86129a",
+      "destinationSha256": "79bb50887e590a87589e7ff762c10c482e44a7451d4166d05f5eda167678fb6a"
+    },
+    {
+      "source": "src/engine/babylon/createSkyRuntime.test.ts",
+      "destination": "fixtures/composition/LegacySkyRuntimeTests.ts",
+      "sourceBlob": "2bdd29ea566d9ba24076d948c64e6f6be16d7fbd",
+      "sourceSha256": "44b80c8bc7ab966b07f45e8a83a06b4a0454f2652899582a4fc2e0d75e8c75ae",
+      "destinationSha256": "b03737cd6d01da82448495e473e93c6a50f4914dd4a70daa70c063f2f2d004a9"
+    },
+    {
+      "source": "src/shell/dateTimePanel.test.ts",
+      "destination": "fixtures/composition/LegacyDateTimePanelTests.ts",
+      "sourceBlob": "c8c1bcb70c8275fae365d386cfdeab04ff920cb9",
+      "sourceSha256": "052713b9ba6a306b1cbffa6b22e8760ad0e8862cac92c8aedca2f4b918e6dffb",
+      "destinationSha256": "e3c61846888cd99e45b8f863eff7178636cd9bf11f01347ea2743f1a8125af5b"
+    },
+    {
+      "source": "docs/proposals/sky.md",
+      "destination": "docs/proposals/sky.md",
+      "sourceBlob": "35a52af6bd8e4a2f871b94c7386720a35956eb89",
+      "sourceSha256": "dd76b644098bab82edba7e19504a2359cbafd3b7f33c04a64a052eb9d577cf3c",
+      "destinationSha256": "dd76b644098bab82edba7e19504a2359cbafd3b7f33c04a64a052eb9d577cf3c"
+    },
+    {
+      "source": "docs/sky-lighting-implementation-prompt.md",
+      "destination": "docs/sky-lighting-implementation-prompt.md",
+      "sourceBlob": "0f57d67d580f6cf9634bae2605327efad9ba12a2",
+      "sourceSha256": "6641da87098c35979253dbc2c52f6f4b72e86de12f03752f87dacb15ee3fc820",
+      "destinationSha256": "6641da87098c35979253dbc2c52f6f4b72e86de12f03752f87dacb15ee3fc820"
+    },
+    {
+      "source": "scripts/validation/sky-model.mjs",
+      "destination": "scripts/validation/sky-model.mjs",
+      "sourceBlob": "32c932b7d36b4954b1950be53bb35c7c1b112c11",
+      "sourceSha256": "23b09a4d335d6c79093223716934821406fd98427ebf321a3b57b2b49ba468dd",
+      "destinationSha256": "75040755ff30de3437db40998131a4c159e1f69fc10db3a122dc7e63dc1c341b"
+    },
+    {
+      "source": "scripts/validation/sky-render.mjs",
+      "destination": "scripts/validation/sky-render.mjs",
+      "sourceBlob": "eb135bf69cebb863a5e20e715b2385294d3aaf64",
+      "sourceSha256": "d8ca5829967223e2682daded8a91a1105be91260941a24a7901d1068466eb3f3",
+      "destinationSha256": "c61ad098746a30d70875fbe4a6f3aa11833d48ec23b375e95d4a7a95cfc96fa7"
+    },
+    {
+      "source": "scripts/validation/skyModelCheck.ts",
+      "destination": "scripts/validation/skyModelCheck.ts",
+      "sourceBlob": "bf1a29a8487a2965bca1c22276da83c8ea8b0da7",
+      "sourceSha256": "0db3c5764a64f056361f14424458ecff483df2360191f81342768122bffb4223",
+      "destinationSha256": "58b08715c5822bea1604a30e60976861732eb4d8dd00e7ce828b5ab7e8c68b91"
+    },
+    {
+      "source": "scripts/validation/skyRenderCheck.ts",
+      "destination": "scripts/validation/skyRenderCheck.ts",
+      "sourceBlob": "00a0f2eb2525c34507eb0657d371befb913aab80",
+      "sourceSha256": "93770ef56ca27b49167837e787f9d3b3871c57c1d055c1caf1e911e67c2ff13d",
+      "destinationSha256": "e2e9fd24034965540219de55752c9dde6ab9260d6a21d0c59c7a6a93ae637e50"
+    },
+    {
+      "source": "scripts/lib/outputDirectory.mjs",
+      "destination": "scripts/lib/outputDirectory.mjs",
+      "sourceBlob": "0e8d5905ca23c3ca72d2a506724d967db3a370bc",
+      "sourceSha256": "9be315714c86402fc63d2d9c8247931ce6a1ec28da8296cf57ada7063300e8cf",
+      "destinationSha256": "8478a946b95ffc2bce0252f6f4573abe25054ea309b370d5e13e35be4c37a2f3"
+    }
+  ],
+  "authoredPaths": [
+    ".attribution-release.json",
+    ".attribution.json",
+    ".github/workflows/attribution-check.yml",
+    ".gitignore",
+    "AGENTS.md",
+    "CONTRIBUTING.md",
+    "README.md",
+    "SOURCE_SELECTION.json",
+    "dependency-pins.json",
+    "docs/source-specifications.md",
+    "docs/validation-tools.md",
+    "eslint.config.js",
+    "fixtures/consumer/babylon.mjs",
+    "fixtures/consumer/minimal.mjs",
+    "fixtures/consumer/minimal.ts",
+    "fixtures/consumer/tsconfig.json",
+    "fixtures/observer.json",
+    "fixtures/validation/skyModelEntry.ts",
+    "fixtures/validation/skyModelHost.ts",
+    "fixtures/validation/skyRenderEntry.ts",
+    "fixtures/validation/skyRenderHost.ts",
+    "package.json",
+    "scripts/check-installed-artifact.mjs",
+    "scripts/copy-assets.mjs",
+    "scripts/outputDirectory.mjs",
+    "scripts/validation/ports.ts",
+    "scripts/validation/toolSources.mjs",
+    "scripts/validation/tsconfig.json",
+    "src/babylon/cleanup.ts",
+    "src/babylon/index.ts",
+    "src/catalogue.ts",
+    "src/panels/index.ts",
+    "src/units.ts",
+    "tests/host-settings.ts",
+    "tests/observer.test.ts",
+    "tests/package-consumer.mjs",
+    "tests/panels.test.ts",
+    "tests/readings.test.ts",
+    "tests/resource-disposal.test.ts",
+    "tests/runtime-ports.test.ts",
+    "tests/validation-tools.test.ts",
+    "tsconfig.json",
+    "vitest.config.ts"
+  ],
+  "excludedInputs": [
+    "Uncommitted src/sky/atmosphere.ts changes",
+    "Untracked src/weather/",
+    "Untracked src/terrain/physicalHeight.ts",
+    "Dirty canonical package.json changes"
+  ],
+  "ownership": "Sky owns clear-atmosphere/astronomy/photometry/presentation and injected host adapters; no engine/renderer/UI/Flight/Campus implementation copying.",
+  "newCausalFixtures": {
+    "tests/runtime-ports.test.ts": {
+      "casesAdded": 2,
+      "status": "UNRUN",
+      "factory": "actual public createSkyRuntime with existing NullEngine and explicit host mocks"
+    },
+    "tests/resource-disposal.test.ts": {
+      "casesAdded": 3,
+      "status": "UNRUN",
+      "factories": "actual public createGroundLightProbe/createStarField/createLightPoints"
+    },
+    "src/babylon/createNightLights.test.ts": {
+      "casesAdded": 2,
+      "status": "UNRUN",
+      "factory": "actual public createNightLights with retained host tile/clock/timer mocks"
+    },
+    "tests/validation-tools.test.ts": {
+      "casesAdded": 4,
+      "status": "UNRUN",
+      "cases": [
+        "Retained original pixel thresholds/loop policy source guards",
+        "Actual tool unavailable-backend branch with supplied Document, no pixels/device",
+        "Retained numerical report branches and unqualified cost marker",
+        "Actual Vite source-guard rejection of private owner implementation input"
+      ]
+    }
+  },
+  "policySentence": "YOU CANNOT HAVE AI AS A CO-AUTHOR, OR YOUR CONTRIBUTIONS WILL BE REJECTED.",
+  "validationTools": {
+    "status": "Prepared transformed source, not inert old private-import tools and not qualified runtime experiments.",
+    "originalToolSources": [
+      "scripts/validation/sky-model.mjs",
+      "scripts/validation/sky-render.mjs",
+      "scripts/validation/skyModelCheck.ts",
+      "scripts/validation/skyRenderCheck.ts",
+      "scripts/lib/outputDirectory.mjs"
+    ],
+    "originalEvidenceReferences": [
+      {
+        "originalPath": "validation/evidence/sky/2026-10-07-sky-model/README.md",
+        "sourceBlob": "c4c051aefeccad9a6139ed8900754780b8039a82",
+        "sourceSha256": "51b3e542c5ad5ab277b149a14d20bff59eb1ecda5a949b42f4949469d1effead",
+        "sourceBytes": 2313,
+        "owner": "foss-earth/research",
+        "destination": "validation/evidence/sky/2026-10-07-sky-model/README.md",
+        "status": "Immutable original evidence reference; no copy/write/run in this Sky increment; Research public artifact/link routing and current tool qualification pending."
+      },
+      {
+        "originalPath": "validation/evidence/sky/2026-10-07-sky-model/sky-model.json",
+        "sourceBlob": "8c40c8a2e3950e8afe08cd4e57f14c4748d1ee4e",
+        "sourceSha256": "13d0c32a1aa47bee2c3d82adf82b75475df2f2a98720c72d113e7aee951e0736",
+        "sourceBytes": 18637,
+        "owner": "foss-earth/research",
+        "destination": "validation/evidence/sky/2026-10-07-sky-model/sky-model.json",
+        "status": "Immutable original evidence reference; no copy/write/run in this Sky increment; Research public artifact/link routing and current tool qualification pending."
+      },
+      {
+        "originalPath": "validation/evidence/sky/2026-10-07-sky-render/README.md",
+        "sourceBlob": "8f164dcdd1dc604bc6d1b69e75cdbf1bac5cc054",
+        "sourceSha256": "2ebb43c57061b2abfb61ec9bc1fa67c5946c345b144376a2cd91f6c47816fd25",
+        "sourceBytes": 2495,
+        "owner": "foss-earth/research",
+        "destination": "validation/evidence/sky/2026-10-07-sky-render/README.md",
+        "status": "Immutable original evidence reference; no copy/write/run in this Sky increment; Research public artifact/link routing and current tool qualification pending."
+      },
+      {
+        "originalPath": "validation/evidence/sky/2026-10-07-sky-render/report.json",
+        "sourceBlob": "5104c3e6e566db6cb9b530aa68b5c0a8f265a3f1",
+        "sourceSha256": "bd692bcddf694ec04b607db8cc7eb864f3e51a65e915846bbacac3c685d6f0e2",
+        "sourceBytes": 35612,
+        "owner": "foss-earth/research",
+        "destination": "validation/evidence/sky/2026-10-07-sky-render/report.json",
+        "status": "Immutable original evidence reference; no copy/write/run in this Sky increment; Research public artifact/link routing and current tool qualification pending."
+      },
+      {
+        "originalPath": "validation/evidence/sky/2026-10-07-sky-render/webgl2-afternoon-as-at-the-viewpoint.png",
+        "sourceBlob": "571c27fd1c2aa6f9fd59798e7363d9ca483f2864",
+        "sourceSha256": "f61ed50d02c83e3bebc2a2353bca79dded182d6729e37b61ab6d5cbdd7b57bf6",
+        "sourceBytes": 11794,
+        "owner": "foss-earth/research",
+        "destination": "validation/evidence/sky/2026-10-07-sky-render/webgl2-afternoon-as-at-the-viewpoint.png",
+        "status": "Immutable original evidence reference; no copy/write/run in this Sky increment; Research public artifact/link routing and current tool qualification pending."
+      },
+      {
+        "originalPath": "validation/evidence/sky/2026-10-07-sky-render/webgl2-afternoon-as-photographed.png",
+        "sourceBlob": "287c938fb0354cdf8c708bf444b5f8a01befab90",
+        "sourceSha256": "d185ef73839f1eaaabef14e4d59aa53193ed11dc4d392581e0929211f43cb585",
+        "sourceBytes": 11790,
+        "owner": "foss-earth/research",
+        "destination": "validation/evidence/sky/2026-10-07-sky-render/webgl2-afternoon-as-photographed.png",
+        "status": "Immutable original evidence reference; no copy/write/run in this Sky increment; Research public artifact/link routing and current tool qualification pending."
+      },
+      {
+        "originalPath": "validation/evidence/sky/2026-10-07-sky-render/webgl2-afternoon.png",
+        "sourceBlob": "84496fdbd3e7414edf7f9d660c08ae3bd61165e4",
+        "sourceSha256": "1f2fbdd22e326ba414f0e7478aa7cffff1dce2b5148447dc83afc262a79bb295",
+        "sourceBytes": 11794,
+        "owner": "foss-earth/research",
+        "destination": "validation/evidence/sky/2026-10-07-sky-render/webgl2-afternoon.png",
+        "status": "Immutable original evidence reference; no copy/write/run in this Sky increment; Research public artifact/link routing and current tool qualification pending."
+      },
+      {
+        "originalPath": "validation/evidence/sky/2026-10-07-sky-render/webgl2-dusk.png",
+        "sourceBlob": "58d91f1a33509276428973e2742757afdda9fe50",
+        "sourceSha256": "877045dbbec982d182c70735d8b6366a33f0ec89ac12f8a17de975d824593787",
+        "sourceBytes": 21759,
+        "owner": "foss-earth/research",
+        "destination": "validation/evidence/sky/2026-10-07-sky-render/webgl2-dusk.png",
+        "status": "Immutable original evidence reference; no copy/write/run in this Sky increment; Research public artifact/link routing and current tool qualification pending."
+      },
+      {
+        "originalPath": "validation/evidence/sky/2026-10-07-sky-render/webgl2-full-moon-night-with-a-beam-on-the-2d-tile.png",
+        "sourceBlob": "936b6b9aa847cd89643253d39672478f187bb20f",
+        "sourceSha256": "62644fc49b37733739adb508bb2e3b327b0925c51607def51f26b5f14315d2ed",
+        "sourceBytes": 7853,
+        "owner": "foss-earth/research",
+        "destination": "validation/evidence/sky/2026-10-07-sky-render/webgl2-full-moon-night-with-a-beam-on-the-2d-tile.png",
+        "status": "Immutable original evidence reference; no copy/write/run in this Sky increment; Research public artifact/link routing and current tool qualification pending."
+      },
+      {
+        "originalPath": "validation/evidence/sky/2026-10-07-sky-render/webgl2-full-moon-night.png",
+        "sourceBlob": "36a0d17cf563645aead07175698abcdb39e7d86c",
+        "sourceSha256": "8868a768da3472dab5094305c9e32383ddb11248a2106be09f7c7d4af91b1ba6",
+        "sourceBytes": 6966,
+        "owner": "foss-earth/research",
+        "destination": "validation/evidence/sky/2026-10-07-sky-render/webgl2-full-moon-night.png",
+        "status": "Immutable original evidence reference; no copy/write/run in this Sky increment; Research public artifact/link routing and current tool qualification pending."
+      },
+      {
+        "originalPath": "validation/evidence/sky/2026-10-07-sky-render/webgl2-full-moon.png",
+        "sourceBlob": "43600dec2fc55d6500540bd50f53cb0c5df7c7e0",
+        "sourceSha256": "4d331a6e239510351afb24edf9a15276b043f390af5b28bd05e266919acf2691",
+        "sourceBytes": 82594,
+        "owner": "foss-earth/research",
+        "destination": "validation/evidence/sky/2026-10-07-sky-render/webgl2-full-moon.png",
+        "status": "Immutable original evidence reference; no copy/write/run in this Sky increment; Research public artifact/link routing and current tool qualification pending."
+      },
+      {
+        "originalPath": "validation/evidence/sky/2026-10-07-sky-render/webgl2-light-point-at-night.png",
+        "sourceBlob": "27ac70882b292a97130a4b2c9a16032a1edf0a4e",
+        "sourceSha256": "3df15f71b12aa581b40556bc22a0a4dd6f5e21de260ba0c86837a7c36e3c19c3",
+        "sourceBytes": 7407,
+        "owner": "foss-earth/research",
+        "destination": "validation/evidence/sky/2026-10-07-sky-render/webgl2-light-point-at-night.png",
+        "status": "Immutable original evidence reference; no copy/write/run in this Sky increment; Research public artifact/link routing and current tool qualification pending."
+      },
+      {
+        "originalPath": "validation/evidence/sky/2026-10-07-sky-render/webgl2-moonless-night.png",
+        "sourceBlob": "eb477898102f3f800b2917564919d9ff74e4f2bd",
+        "sourceSha256": "bba2f41c329b7cd4328652d9a5b6e9138e165d898cc7bea5926a9ad7af30cd08",
+        "sourceBytes": 6689,
+        "owner": "foss-earth/research",
+        "destination": "validation/evidence/sky/2026-10-07-sky-render/webgl2-moonless-night.png",
+        "status": "Immutable original evidence reference; no copy/write/run in this Sky increment; Research public artifact/link routing and current tool qualification pending."
+      },
+      {
+        "originalPath": "validation/evidence/sky/2026-10-07-sky-render/webgl2-planet-afternoon-over-minneapolis.png",
+        "sourceBlob": "622aa9b035b423cf8713581cab0750ae7ffda88c",
+        "sourceSha256": "589ac9d06a765b3ac08350385edb89fa75f8178c9e79eade77ed3f1b75728f9b",
+        "sourceBytes": 91929,
+        "owner": "foss-earth/research",
+        "destination": "validation/evidence/sky/2026-10-07-sky-render/webgl2-planet-afternoon-over-minneapolis.png",
+        "status": "Immutable original evidence reference; no copy/write/run in this Sky increment; Research public artifact/link routing and current tool qualification pending."
+      },
+      {
+        "originalPath": "validation/evidence/sky/2026-10-07-sky-render/webgl2-sky-off.png",
+        "sourceBlob": "ac779e1026a7d3dcdb6a948d8868ec71f55c8501",
+        "sourceSha256": "8963138f9cae7d0ea5096c9614c56e89aadbfce5ba30428a69749c2056d90fe4",
+        "sourceBytes": 5397,
+        "owner": "foss-earth/research",
+        "destination": "validation/evidence/sky/2026-10-07-sky-render/webgl2-sky-off.png",
+        "status": "Immutable original evidence reference; no copy/write/run in this Sky increment; Research public artifact/link routing and current tool qualification pending."
+      },
+      {
+        "originalPath": "validation/evidence/sky/2026-10-07-sky-render/webgl2-stars-from-400-km-by-day.png",
+        "sourceBlob": "452d35e33bd0993600b038f471692e8e5e8b5b80",
+        "sourceSha256": "f523873b147a2ce6d295769081a28f0a648c8b875680661f3669f4e9fa2945be",
+        "sourceBytes": 24326,
+        "owner": "foss-earth/research",
+        "destination": "validation/evidence/sky/2026-10-07-sky-render/webgl2-stars-from-400-km-by-day.png",
+        "status": "Immutable original evidence reference; no copy/write/run in this Sky increment; Research public artifact/link routing and current tool qualification pending."
+      },
+      {
+        "originalPath": "validation/evidence/sky/2026-10-07-sky-render/webgl2-stars.png",
+        "sourceBlob": "a9ea10df9a846729036ed2d83fa12b56229b5519",
+        "sourceSha256": "4eedb40cea2e5a9f341e0af4da53d8dbb2cbab9dc207e9b549429697fe015978",
+        "sourceBytes": 32233,
+        "owner": "foss-earth/research",
+        "destination": "validation/evidence/sky/2026-10-07-sky-render/webgl2-stars.png",
+        "status": "Immutable original evidence reference; no copy/write/run in this Sky increment; Research public artifact/link routing and current tool qualification pending."
+      }
+    ],
+    "publicInputs": [
+      "@foss-earth/sky",
+      "@foss-earth/sky/settings",
+      "@foss-earth/sky/catalogue",
+      "@foss-earth/sky/babylon",
+      "@foss-earth/engine",
+      "@foss-earth/engine/babylon",
+      "@foss-earth/engine/settings",
+      "@foss-earth/renderer/babylon",
+      "@foss-earth/ui/settings",
+      "@foss-earth/research/headless-chrome"
+    ],
+    "sourceOnlyEntryFixtures": [
+      "fixtures/validation/skyModelEntry.ts",
+      "fixtures/validation/skyRenderEntry.ts"
+    ],
+    "sourceDeclarationCommand": "npm run typecheck:validation",
+    "benchmarkAndBrowserCommandsSeparateGrants": true,
+    "experimentsExecuted": [],
+    "missingHooks": [
+      "Current exact public Research helper archive/declarations/closure and helper SHA256.",
+      "Native backend/readback/color/real GPU identity and transfer-budget admission qualification.",
+      "NASA acquisition is deliberately absent and throws until an explicit admitted host transport is supplied.",
+      "Current exact Engine/Renderer/UI/Sky archives, actual complete guarded consumer closure and downstream adoption."
+    ]
+  }
+}

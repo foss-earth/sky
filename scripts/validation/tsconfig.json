@@ -1,0 +1,11 @@
+{
+  "compilerOptions": {
+    "target": "ES2023", "module": "NodeNext", "moduleResolution": "NodeNext",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"], "types": ["node"],
+    "strict": true, "verbatimModuleSyntax": true, "skipLibCheck": true,
+    "noUnusedLocals": true, "noUnusedParameters": true, "incremental": true,
+    "tsBuildInfoFile": "../../node_modules/.tmp/sky-validation.tsbuildinfo",
+    "rootDir": "../..", "outDir": "../../build/validation-tools"
+  },
+  "include": ["./*.ts", "../../fixtures/validation/*.ts"]
+}
