@@ -47,7 +47,11 @@
     "AGENTS.md",
     "CODE_OF_CONDUCT.md",
     "CONTRIBUTING.md",
-    "SECURITY.md"
+    "SECURITY.md",
+    ".attribution.json",
+    ".attribution-release.json",
+    ".github/workflows/attribution-check.yml",
+    "deps/foss-earth-ci-1db73d1ddb342e348a2c9e8387f7bbc7ebb3225e.tgz"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json && node scripts/copy-assets.mjs",
@@ -92,6 +96,7 @@
     "vite": "8.3.4",
     "@foss-earth/research": "0.1.0",
     "@foss-earth/ui": "0.1.0",
-    "@babylonjs/core": "8.56.2"
+    "@babylonjs/core": "8.56.2",
+    "@foss-earth/ci": "file:deps/foss-earth-ci-1db73d1ddb342e348a2c9e8387f7bbc7ebb3225e.tgz"
   }
 }
