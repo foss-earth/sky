@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "owner": "foss-earth/sky",
   "preparedAtUtc": "2026-10-09T20-23-58Z",
-  "status": "Current source seal; individual retained check receipts define qualification. Installed archive and application/remote adoption separately recorded in external release descriptor.",
+  "status": "Current portable source seal; external exact delivery describes implementation/browser/ref qualification and outstanding remote gates.",
   "sourceRevision": "90e23b3ee96f53ec5900afc5991a21fffa58649d",
   "priorSourceReceipt": "build/source-only/2026-10-09T20-23-58Z/SOURCE_RECEIPT.json.before",
   "sourceManifestPath": "build/source-only/2026-10-09T20-23-58Z/source-manifest.json",
@@ -529,11 +529,12 @@
     "coordinator public transport and remote admission"
   ],
   "policySentence": "You cannot have AI as a co-author, or your contributions will be rejected.",
-  "verifiedAtUtc": "2026-10-10T00:09:06.196934+00:00",
+  "verifiedAtUtc": "2026-10-10T03:26:02.315141+00:00",
   "currentSourceManifest": {
-    "path": "/Users/felg/gh/foss-earth/foss-earth.github.io/build/repository-split/checks/2026-10-09-granted-verification/sky-r4-sealed-source-files.json",
-    "sha256": "2547399731dfa8551108d67a42a89c68f1cd107bc302d5d6b8dda2df94aab3a6",
-    "fileCount": 94
+    "evidenceId": "sky-current-source-files.json",
+    "sha256": "548db7459b02c600f3ae99cd865b6635b071baaf2bed8f0a82f0ce4c70d18cad",
+    "fileCount": 94,
+    "scope": "Private retained documentary evidence, not an artifact path or public URL"
   },
   "currentSharedCi": {
     "revision": "1db73d1ddb342e348a2c9e8387f7bbc7ebb3225e",
@@ -541,24 +542,29 @@
     "artifactSha256": "bd884d925b8a7339b15fa61a477cf652bb73d41cc68addf50a050ab6cb151611",
     "descriptorSha256": "d60ee5067185a768f0890da2ed87d82dbfa08f28282e4d05a35e823c70307122",
     "callerSha256": "b9fdfbf4bd61ed727abaef4fd9990b92714a6d2c1388feec600dc16337436b2c",
-    "fullIntendedRefs": "external release descriptor; mandatory complete nonempty audit after this commit",
+    "fullIntendedRefs": "complete external delivery audit after this commit",
     "remoteAdmissionVerifiedByOwner": false
   },
   "currentChecks": [
     {
-      "receipt": "/Users/felg/gh/foss-earth/foss-earth.github.io/build/repository-split/checks/2026-10-09-granted-verification/sky-ci-install.json",
+      "evidenceId": "sky-ci-install.json",
       "sha256": "621e493cec9b9a72b9d975efb5bb7c29cab23d92631d0e3efca1135c6be0d5cc",
       "exitCode": 0
     },
     {
-      "receipt": "/Users/felg/gh/foss-earth/foss-earth.github.io/build/repository-split/checks/2026-10-09-granted-verification/sky-current-conformance.json",
+      "evidenceId": "sky-current-conformance.json",
       "sha256": "1825ab9af07ba8e219a4f0cd139cdf72fc29c8d2093c15744151f7cc0f345c3a",
       "exitCode": 0
     },
     {
-      "receipt": "/Users/felg/gh/foss-earth/foss-earth.github.io/build/repository-split/checks/2026-10-09-granted-verification/sky-r4-track-canonical.json",
+      "evidenceId": "sky-r4-track-canonical.json",
       "sha256": "129b5882bb32c7a9830d85fe3b93ad0d73b61db6ab57ac234bafd4627320420a",
       "exitCode": 0
     }
-  ]
+  ],
+  "publicationEvidence": {
+    "scope": "Portable public provenance for prior retained local qualification. Execution/source manifests remain private retained evidence identified by documentary evidence IDs and their unchanged SHA256 seals. Evidence IDs are not package-relative files or public download URLs.",
+    "originalReceiptSha256": "2dd2c3323e4df089e16e3b66c3072d81afe15d9dfeef8424f1fe15b3655f0a23",
+    "currentPreparation": "Metadata-only portable publication candidate; new source/artifact/ref qualification remains pending. Existing individual check receipts and exact archive descriptors retain qualification only for their original bytes and scope."
+  }
 }
