@@ -1,179 +1,90 @@
 # @foss-earth/sky
 
-Private staging candidate, version 0.1.0. This repository owns the current clear
-atmosphere, astronomy, photometry, stars, Sky tab and Date and time tab. It extracts
-committed FOSS Earth source `90e23b3ee96f53ec5900afc5991a21fffa58649d`, tree
-`c68d1fabd9fce19e255ea89c65502666d0f74a27`. Dirty atmosphere and weather work is
-excluded. `provenance.json` records each selected source blob, byte digest and
-transformation. Source history import and publication remain coordinator gates.
+Clear-sky atmosphere, astronomy, photometry, stars, and the Sky and Date and time tabs for FOSS Earth. Version 0.1.0.
 
-| Public export | Contract |
+This repository owns the solar and lunar position models, the clear-atmosphere and sky-illumination model, the star catalogue and star field, night-light rendering, the clock helpers, and the two UI panels. Clouds, precipitation, winds, forecast ingestion and volumetric weather are not implemented here.
+
+## Exports
+
+| Export | Contents |
 | --- | --- |
-| `@foss-earth/sky` | Pure solar/lunar position and ephemeris, atmosphere tables, sky illumination and dome geometry, photometry, star catalogue, observer basis and clock helpers. |
-| `@foss-earth/sky/catalogue` | Optional explicit retained catalogue records and record-byte layout; original data notices preserved. |
-| `@foss-earth/sky/settings` | `SKY_PARAMETERS`, `SKY_SECTION_TITLES`, owned model choices and current parameter IDs. |
-| `@foss-earth/sky/panels` | `createSkyPanel`, `createDateTimePanel`, explicit UI/refresh/storage ports and temporary structural dial types. |
-| `@foss-earth/sky/babylon` | Optional `createSkyRuntime`, night-light tiles, star/point resources, ground probe, structural terrain ports and `bindSkyReadingsAndNotes`. Uses the supplied Scene. |
-| `@foss-earth/sky/styles.css` | Sky and Date and time container layout. Generic controls and dials use UI styles. |
+| `@foss-earth/sky` | Pure solar and lunar position and ephemeris, atmosphere tables, sky illumination and dome geometry, photometry, star catalogue, observer basis and clock helpers. |
+| `@foss-earth/sky/catalogue` | Optional retained catalogue records and the record-byte layout. Original data notices are preserved. |
+| `@foss-earth/sky/settings` | `SKY_PARAMETERS`, `SKY_SECTION_TITLES`, the model choices and the current parameter IDs. |
+| `@foss-earth/sky/panels` | `createSkyPanel`, `createDateTimePanel`, the UI, refresh and storage ports, and structural dial types. |
+| `@foss-earth/sky/babylon` | Optional `createSkyRuntime`, night-light tiles, star and point resources, the ground probe, structural terrain ports and `bindSkyReadingsAndNotes`. It uses the Scene you supply. |
+| `@foss-earth/sky/styles.css` | Layout for the Sky and Date and time containers. Generic controls and dials are styled by the UI package. |
 
-Pure and panel exports create no renderer, read no browser globals on import and
-import no React, Babylon, engine or application implementation. Panel DOM is
-created only when its factory is called. UI registry types are public type-only
-imports. Optional Babylon needs the current public `@foss-earth/ui` contract and
-`@babylonjs/core` 8.56.2; `dependency-pins.json` records the pending replacement
-UI archive and prior foundation evidence. No current artifact, package range or
-platform support is qualified before its checks.
+The pure and panel exports create no renderer, read no browser globals on import, and import no React, Babylon, engine or application code. Panel DOM is created only when a factory is called. UI registry types are type-only imports. The optional Babylon entry needs the public `@foss-earth/ui` contract and `@babylonjs/core` 8.56.2 as peer dependencies (both optional in `package.json`).
 
-The host registers `SKY_PARAMETERS` in its `SettingsRegistry` and applies the
-section titles. Existing Sky/Time homes and IDs are preserved, including
-Sky-owned `renderer.ambientFillMultiplier` and `renderer.exposureEV`. Engine map
-download concurrency/retry settings remain host-owned and must be registered by
-the host when night maps are enabled. This package supplies no complete feature
-catalogue, singleton settings object or independent settings persistence record.
+## Using it from a host app
 
-`observerAt(x, y, z, ecefToGeodetic)` requires the host conversion port.
-`observerFromGeodetic` accepts a host-provided place. Neither API implements
-world-coordinate conversion. Angular constants and display gamma are local
-units; camera mathematics stays in engine.
-Pure clock helpers use `SkyTimeSettings.get<T>(id)` rather than an optional UI
-declaration dependency. `DAY_MS` and `HOUR_MS` are public clock units.
+### Settings
 
-Panels require the supplied `document`, `settings`, `now`, `refresh.subscribe` and UI factories
-`createParameterSection`, `createSectionsElement` and `appendHostSections`.
-Date and time also requires injected `createDial` and `wrapTurn`. The temporary
-`Dial*` declarations describe the exact committed widget contract; its runtime
-and CSS remain UI-owned. The next UI release must expose this dial surface before
-full host adoption. Supply `panelStorage` explicitly to choose persistence or
-`null` for memory only. The host supplies place/time changes and visible refresh
-notifications. Panels start no interval; destruction detaches refresh/settings
-subscriptions, dials and sections. The Sky time action uses a host callback to
-open the Date and time tab.
+Register `SKY_PARAMETERS` in your `SettingsRegistry` and apply the section titles. The package keeps the existing Sky and Time settings homes and IDs, including the Sky-owned `renderer.ambientFillMultiplier` and `renderer.exposureEV`. It supplies no singleton settings object and no settings persistence of its own.
 
-The same supplied refresh port is passed into every UI parameter/host section.
-The new UI contract requires it explicitly. The earlier frozen UI artifact is
-only a foundation fixture and cannot qualify these additional UI surfaces;
-Sky's installed increment waits for the checked replacement UI artifact.
+The engine's map download concurrency and retry settings stay with the host. Register them yourself when night maps are enabled.
 
-The Babylon adapter requires a host Scene, settings, ECEF conversion, world
-matrix, ground-mesh predicate, epoch clock, cost clock, hidden-state reader,
-timers and frame callback. `terrain.setLighting` and `terrain.setLocalLights`
-adapt its physical output to the engine terrain implementation. NASA night maps
-use host `fetchTile`, `measureResponse`, `retryDelayMs` and `setNightLightMap`
-ports. These preserve the engine's cache, transport, retry and resource authority.
-Optional decoding stays in the browser adapter. The existing single wake timer
-requests a host frame when the Sun crosses its configured update threshold; the
-host drives `update()`. Sky starts no independent render/tick loop and initializes
-no second scene or renderer. Disposal cancels host timers/downloads and releases
-its own lights, meshes, textures, probes and subscriptions.
+### Observer and clock
 
-`bindSkyReadingsAndNotes({settings, sky})` binds the existing parameter homes to
-the supplied instance and preserves the original reading wording and units.
-Readings run when the existing UI asks; no polling or render loop is started.
-Call its returned detach function before replacing the binding and before
-disposing the host Sky. Detach removes watches, readings and all owned notes;
-it disposes neither Sky nor registry. `skyReadings`, `nightLightReadings` and
-`applySkyNotes` are also exported for explicit host composition.
-`createStarField(scene, {clock})` measures work using the supplied host cost
-clock. `GroundLightProbeOptions.clock` is also required; the runtime supplies
-that same clock to both resources. It does not start a second clock. Disposal
-stops later setter/subscription/readback publication, and both panels dispose
-their own subscriptions/resources once even if destruction is repeated.
+- `observerAt(x, y, z, ecefToGeodetic)` needs the host's ECEF-to-geodetic conversion.
+- `observerFromGeodetic` takes a place the host has already resolved.
+- Neither implements world-coordinate conversion. Angular constants and display gamma are local units. Camera mathematics stays in the engine.
+- Clock helpers read `SkyTimeSettings.get<T>(id)`. `DAY_MS` and `HOUR_MS` are exported.
 
-Runtime disposal marks the instance stale before calling any native or host
-release. It attempts all owned timer, light, dome, star, ground-probe, night-map,
-terrain, listener, subscription and note cleanup, then throws one
-`AggregateError` containing the failures. Owned references are detached before
-release, so a repeated disposal does not retry them. Model-off transitions also
-finish the remaining shutdown steps before reporting failures. Ground probes,
-stars, light points and night maps follow the same release rule. Settings,
-timer, readback, catalogue and night-map notifications retained by a failing
-host release cannot restart a disposed instance. A late night response cancels
-its body instead of starting image decoding. This guarantees cleanup attempts
-and stale-callback suppression; a native or host operation that fails to release
-its resource still needs the host to resolve that reported failure.
+`fixtures/observer.json` holds a worked coordinate example.
 
-Prepared causal cases in `tests/runtime-ports.test.ts`,
-`tests/resource-disposal.test.ts` and the retained night-map suite exercise the
-actual public Babylon factories with the existing NullEngine and host-port
-scaffolds. They include simultaneous native/terrain/listener/timer/unsubscribe
-failures, continued model-off cleanup, late probe/night/settings notifications,
-and resource release after observer or map-detachment failure. These new cases
-are source-only and unrun; the original numerical and lifecycle assertions
-remain retained.
+### Panels
 
-This is the committed clear-sky ladder and current night/star capabilities.
-Clouds, precipitation, winds, forecast ingestion, volumetric weather and the
-staged weather proposal are not implemented or claimed by this release. The
-Bright Star Catalogue's retained 9,096-entry data and source notices remain in
-`starCatalogue.ts`; copying the project license does not invent additional data
-rights. Catalogue and SPA generation tools are retained with explicit local
-inputs; they prepare output under dated `build/generated` by default and perform
-no downloads. `npm run generate:stars -- <catalog> [output]` and
-`npm run generate:solar-terms -- <layout-text> [output]` accept an optional output
-inside this repository. Neither tool has been executed or regeneration qualified
-here; the committed generated records are retained.
+Both panels need the host's `document`, `settings`, `now`, `refresh.subscribe` and the UI factories `createParameterSection`, `createSectionsElement` and `appendHostSections`. The Date and time panel also needs `createDial` and `wrapTurn`. The `Dial*` types describe the dial widget contract; the dial's runtime and CSS belong to the UI package.
 
-`fixtures/consumer/minimal.ts` shows all public type surfaces and explicit host
-ports. `fixtures/observer.json` declares the coordinate worked example.
-Existing numerical/reference, ground-probe and night-map lifecycle tests are
-retained, with host settings/transport fixtures. Additional tests cover observer
-injection, panel refresh/disposal, and supplied-scene/static-frame behavior.
-No checks have run for this candidate.
-The original full Sky runtime and Date and time assertions are also retained in
-`fixtures/composition/LegacySkyRuntimeTests.ts` and
-`fixtures/composition/LegacyDateTimePanelTests.ts`. Their registration functions
-require real public host terrain/geocoordinate/UI adapters; they are inactive
-and unrun until that composition adopts them. They copy no engine shader,
-coordinate converter, generic dial or application implementation.
+- Pass `panelStorage` to choose persistence, or `null` for memory only.
+- The host supplies place and time changes and the refresh notifications.
+- The same refresh port is passed to every UI parameter and host section.
+- Panels start no interval. Destroying a panel detaches its refresh and settings subscriptions, dials and sections, and repeated destruction is safe.
+- The Sky panel's time action calls a host callback to open the Date and time tab.
 
-The supplied-document panel case uses mocked host UI factories. Current public UI Document forwarding is prepared source only; real installed
-cross-realm control behavior remains unqualified until a checked replacement
-UI archive is adopted. The older frozen UI does not provide that new contract. Legacy night-map browser decoding and native
-texture/readback submission remain retained adapters; no shared native-transfer
-budget qualification or backend restoration is claimed here.
+### Babylon runtime
 
-Reserve a coordinator check window before these commands:
+`createSkyRuntime` needs a host Scene, settings, ECEF conversion, world matrix, a ground-mesh predicate, an epoch clock, a cost clock, a hidden-state reader, timers and a frame callback. It creates no second scene or renderer and starts no render loop. The host calls `update()`.
+
+- `terrain.setLighting` and `terrain.setLocalLights` adapt its lighting output to the engine's terrain.
+- NASA night maps use the host's `fetchTile`, `measureResponse`, `retryDelayMs` and `setNightLightMap`, so the engine keeps its cache, transport and retry behavior. Image decoding stays in the browser adapter.
+- One wake timer asks the host for a frame when the Sun crosses its update threshold.
+- `createStarField(scene, {clock})` and `GroundLightProbeOptions.clock` both require the host cost clock. The runtime passes the same clock to both.
+
+`bindSkyReadingsAndNotes({settings, sky})` binds the existing parameter homes to a Sky instance and keeps the original reading wording and units. Readings run when the UI asks for them. Call the returned detach function before replacing the binding and before disposing Sky. Detach removes watches, readings and owned notes, and disposes neither Sky nor the registry. `skyReadings`, `nightLightReadings` and `applySkyNotes` are also exported for custom composition.
+
+### Disposal
+
+Disposing the runtime marks the instance stale first. It then tries every owned cleanup (timers, lights, dome, stars, ground probe, night maps, terrain, listeners, subscriptions, notes) and throws one `AggregateError` with the failures. Owned references are detached before release, so disposing twice does not retry. Turning a model off finishes its remaining shutdown steps before reporting failures. Notifications that arrive late from settings, timers, readback, the catalogue or night maps cannot restart a disposed instance, and a late night-map response cancels its body instead of decoding it.
+
+This guarantees that cleanup is attempted and stale callbacks are suppressed. If a native or host release fails, the host still has to resolve the reported failure.
+
+## Data and generation tools
+
+`starCatalogue.ts` holds the 9,096-entry Bright Star Catalogue data with its original source notices. Copying the project license does not grant any additional rights to that data.
+
+Two tools regenerate committed data from inputs you supply. They download nothing and write under a dated `build/generated` directory by default; an optional output path must be inside this repository.
 
 ```sh
-npm run ci
-npm run test:consumer -- --sky=/path/to/checked/sky.tgz --sky-sha256=<64-hex> --ui=/path/to/checked/ui.tgz --ui-sha256=<64-hex> --babylon=/path/to/babylon.tgz --babylon-sha256=<64-hex> --typescript=/path/to/typescript.tgz --typescript-sha256=<64-hex>
-npm run check:conformance -- --consumer . --trusted-release .attribution-release.json --output-root build/common-conformance/2026-10-09-sky
+npm run generate:stars -- <catalog> [output]
+npm run generate:solar-terms -- <layout-text> [output]
 ```
 
-Tests cap workers at 50%; typecheck/build caches stay in `node_modules/.tmp`,
-lint cache in `node_modules/.cache`, and offline npm cache in `build/npm-cache`.
-The installed consumer requires actual owner/UI/Babylon/compiler archives with
-explicit SHA-256 pins and installs them offline. It loads pure/settings/panels
-with peer imports forbidden and rejects realpath and type resolution outside its
-clean workspace, including a negative control. It then exercises the optional
-adapter and settings binding using a supplied NullEngine Scene and checks
-strict declarations. No ancestor dependency is silently packed. Installed
-consumer and shared conformance are separate mandatory acceptance gates from
-the source `ci` command; the reviewed common CI archive must first be installed
-for conformance. This provides no GPU or browser visual qualification. Retain dated
-logs and the resulting archive/digest/environment receipt; no server is needed.
+The committed generated records are the ones the package uses.
 
-Migration adapts engine conversion/terrain/cache/clock ports and UI factories at
-host composition, replaces old private imports with the exports above, and keeps
-the same parameter/storage records. Rollback can restore the prior owner imports
-and exact dependency lock because no setting IDs or record versions are changed.
-Current Earth/flight/campus adoption, exact release revision/artifact, shared
-`foss-earth/ci` caller/policy/conformance pins and actual remote admission settings
-remain outstanding. The source caller is now pinned to reviewed CI
-`9e046dd482e0229dc7c7b2d71b079d5905664656`; installed conformance, full intended
-refs and remote admission have not run for this owner. No copied local checker substitutes for the shared component.
-Metadata checks must cover docs-only changes.
+## Validation tools
 
+`scripts/validation/` holds the model and render validation tools (`npm run validate:model`, `npm run validate:render`). They use only public Engine, Renderer, Sky and UI imports and explicit host fixtures. The render driver needs a browser and the public headless-Chrome helper from [@foss-earth/research](https://github.com/foss-earth/research). See [validation tools](docs/validation-tools.md) for the numerical and pixel rules, the report schema, and the WebGL 1 options.
 
-The four original model/render validation tools are now prepared under this
-owner's `scripts/validation/`, with public-only Engine/Renderer/Sky/UI imports and
-explicit host fixtures. [Validation source contracts](docs/validation-tools.md)
-records retained numerical/pixel rules, report schema, experiment-native WebGL 1
-options and unavailable hooks. `typecheck:validation` prepares a separate strict
-declaration check; neither model timings nor a Chrome/GPU run is implicit in CI.
-The browser driver requires the exact installed optional Research public helper
-and its module digest. These tools, fixtures, new catalogue export and all current
-checks remain UNRUN; original evidence does not qualify the migration.
+## Development
+
+This package names other `@foss-earth/*` libraries (`engine`, `renderer`, `research` and `ui`) by versions that are not published yet. Its own `npm install`, tests and build therefore do not work on their own. Develop it through the app, which uses libraries straight from their checkouts: see [Local source](https://github.com/foss-earth/app#local-source).
+
+Scripts in `package.json`: `build`, `typecheck`, `lint`, `test`, `test:consumer`, `typecheck:consumer`, `typecheck:validation` and `ci`.
+
+Other documents: [source specifications](docs/source-specifications.md), [Sky proposal](docs/proposals/sky.md), [lighting implementation prompt](docs/sky-lighting-implementation-prompt.md). `fixtures/consumer/minimal.ts` shows every public type surface with explicit host ports.
 
 ## Project policies
 
