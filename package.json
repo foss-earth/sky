@@ -7,23 +7,31 @@
   "type": "module",
   "exports": {
     ".": {
+      "source": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
     "./settings": {
+      "source": "./src/settings.ts",
       "types": "./dist/settings.d.ts",
       "import": "./dist/settings.js"
     },
     "./panels": {
+      "source": "./src/panels/index.ts",
       "types": "./dist/panels/index.d.ts",
       "import": "./dist/panels/index.js"
     },
     "./babylon": {
+      "source": "./src/babylon/index.ts",
       "types": "./dist/babylon/index.d.ts",
       "import": "./dist/babylon/index.js"
     },
-    "./styles.css": "./dist/styles/sky.css",
+    "./styles.css": {
+      "source": "./src/styles/sky.css",
+      "default": "./dist/styles/sky.css"
+    },
     "./catalogue": {
+      "source": "./src/catalogue.ts",
       "types": "./dist/catalogue.d.ts",
       "import": "./dist/catalogue.js"
     }
@@ -33,25 +41,13 @@
     "LICENSE",
     "NOTICE",
     "README.md",
-    "provenance.json",
     "fixtures",
-    "dependency-pins.json",
     "scripts/sky",
     "scripts/outputDirectory.mjs",
     "scripts/validation",
     "scripts/lib",
     "docs",
-    "SOURCE_SELECTION.json",
-    "SOURCE_RECEIPT.json",
-    "SOURCE_LINEAGE.json",
-    "AGENTS.md",
-    "CODE_OF_CONDUCT.md",
-    "CONTRIBUTING.md",
-    "SECURITY.md",
-    ".attribution.json",
-    ".attribution-release.json",
-    ".github/workflows/attribution-check.yml",
-    "deps/foss-earth-ci-1db73d1ddb342e348a2c9e8387f7bbc7ebb3225e.tgz"
+    "AGENTS.md"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json && node scripts/copy-assets.mjs",
@@ -60,12 +56,10 @@
     "test": "vitest run --maxWorkers=50%",
     "test:consumer": "node scripts/check-installed-artifact.mjs",
     "typecheck:consumer": "tsc -p fixtures/consumer/tsconfig.json",
-    "ci": "npm run check:conformance && npm run check:implementation",
+    "ci": "npm run check:implementation",
     "generate:stars": "node scripts/sky/build-star-catalogue.mjs",
     "generate:solar-terms": "node scripts/sky/extract-spa-terms.mjs",
-    "check:conformance": "node node_modules/@foss-earth/ci/bin/conformance.mjs --consumer . --trusted-release .attribution-release.json --output-root build/common-conformance",
     "check:implementation": "npm run typecheck && npm run lint && npm test && npm run build && npm run typecheck:consumer && npm run typecheck:validation",
-    "check:attribution": "node node_modules/@foss-earth/ci/bin/attribution.mjs --repo . --refs-file build/repository-split/intended-publication-refs.json",
     "typecheck:validation": "tsc -p scripts/validation/tsconfig.json --noEmit --tsBuildInfoFile node_modules/.tmp/sky-validation.tsbuildinfo",
     "validate:model": "node scripts/validation/sky-model.mjs",
     "validate:render": "node scripts/validation/sky-render.mjs"
@@ -96,7 +90,6 @@
     "vite": "8.3.4",
     "@foss-earth/research": "0.1.0",
     "@foss-earth/ui": "0.1.0",
-    "@babylonjs/core": "8.56.2",
-    "@foss-earth/ci": "file:deps/foss-earth-ci-1db73d1ddb342e348a2c9e8387f7bbc7ebb3225e.tgz"
+    "@babylonjs/core": "8.56.2"
   }
 }

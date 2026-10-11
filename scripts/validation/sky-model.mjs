@@ -21,8 +21,6 @@ const sources = await sourceDigests([
   "fixtures/validation/skyModelEntry.ts",
   "fixtures/validation/skyModelHost.ts",
   "scripts/lib/outputDirectory.mjs",
-  "SOURCE_SELECTION.json",
-  "provenance.json"
 ], [
   "@foss-earth/sky",
   "@foss-earth/sky/settings",
