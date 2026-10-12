@@ -413,6 +413,29 @@ export function groundLightAt(table: Float32Array, mu: number, out: Rgb = [0, 0,
   return out;
 }
 
+/**
+ * The height, as the sine of its elevation, at which a body of illuminance
+ * `illuminanceAboveAirLux` above the air puts `lux` on level ground by the
+ * table: its own light and the sky's, as a terrain shader reads it. The light
+ * grows with the height, so halving finds it. 1 where even overhead it puts
+ * less, and the foot of the table's fade where `lux` is none.
+ */
+export function groundLightSine(table: Float32Array, illuminanceAboveAirLux: number, lux: number): number {
+  const light: Rgb = [0, 0, 0];
+  const at = (mu: number): number => luminance(groundLightAt(table, mu, light)) * illuminanceAboveAirLux;
+  let low = Math.sin((GROUND_LIGHT_TABLE.fromDeg - GROUND_LIGHT_TABLE.fadeDeg) * DEG_TO_RAD);
+  let high = 1;
+  if (at(high) <= lux) return high;
+  if (at(low) >= lux) return low;
+  // Fifty halvings leave less than 10^-15 of a sine between them.
+  for (let step = 0; step < 50; step++) {
+    const middle = (low + high) / 2;
+    if (at(middle) < lux) low = middle;
+    else high = middle;
+  }
+  return high;
+}
+
 // ─── The sky dome ──────────────────────────────────────────────────────
 
 /** Rows added around the Sun's height, as offsets in degrees, so its glow is not left to the horizon's rows. */

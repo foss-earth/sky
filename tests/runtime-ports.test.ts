@@ -100,4 +100,32 @@ describe("Sky host/runtime lifecycle", () => {
     expect(() => h.sky.update()).toThrow(AggregateError); expect(dispose).toHaveBeenCalledOnce(); expect(h.scene.lights).toHaveLength(0); expect(h.sky.getEnvironment()).toBeNull(); expect(listener).toHaveBeenCalledExactlyOnceWith(null);
     h.sky.update(); expect(dispose).toHaveBeenCalledOnce(); h.settings.set("sky.model", "lights"); h.sky.update(); expect(h.sky.isLighting()).toBe(true); expect(h.scene.lights).toHaveLength(2);
   });
+  it("switches the lamps on where the Sun is low enough, below the viewpoint and on the map, and nowhere between", () => {
+    const createNightLights = vi.fn((_options: NightLightsOptions) => { void _options; return { update: () => {}, radianceAt: () => 30.5, getState: () => ({ window: null, pending: null, needed: 0, here: 0, loading: 0, failed: 0, memoryBytes: 0, gpuBytes: 0, downloadedBytes: 0, error: null }), dispose: () => {} }; });
+    const h = harness({ createNightLights }, settings => settings.setMany({ "sky.nightLights.mode": "light", "sky.time.utcHours": 18.25 }));
+    const show = () => {
+      h.sky.update();
+      const environment = h.sky.getEnvironment()!;
+      const terrain = h.setLighting.mock.calls.at(-1)![0] as { night: { switchSine: number } | null };
+      return { environment, night: environment.nightLights!, switchSine: terrain.night!.switchSine };
+    };
+    // At 0° N 0° E on the equinox the Sun sets at about 18:07 UTC: at 18:15 it is 2° down, at 18:36 about 7°.
+    const dusk = show();
+    expect(dusk.environment.illumination.geometricElevationDeg).toBeGreaterThan(-3);
+    expect(dusk.environment.illumination.geometricElevationDeg).toBeLessThan(-1);
+    // 16 lx, where a photocell switches, is twilight with the Sun 5° down; the map's shader gets that height's sine.
+    expect(dusk.night.switchSunDeg).toBeCloseTo(-5, 0);
+    expect(dusk.switchSine).toBeCloseTo(Math.sin((dusk.night.switchSunDeg! * Math.PI) / 180), 12);
+    expect(dusk.night.below).toMatchObject({ radiance: 30.5, on: false });
+    // Off, the lamps below send nothing up: the ground's light is the sky's alone.
+    expect(dusk.environment.groundLight.luminance).toEqual(dusk.environment.illumination.groundLuminance);
+    h.settings.set("sky.time.utcHours", 18.6);
+    const night = show();
+    expect(night.environment.illumination.geometricElevationDeg).toBeLessThan(-6);
+    expect(night.night.below).toMatchObject({ radiance: 30.5, on: true });
+    expect(night.environment.groundLight.luminance[1]).toBeGreaterThan(night.environment.illumination.groundLuminance[1] + night.night.below!.luminance * 0.5);
+    // A brighter switch, as Britain's 35 lx, switches them on earlier, with the Sun higher.
+    h.settings.set("sky.nightLights.switchIlluminance", 35);
+    expect(show().night.switchSunDeg).toBeGreaterThan(dusk.night.switchSunDeg! + 0.5);
+  });
 });

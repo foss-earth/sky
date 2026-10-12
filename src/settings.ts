@@ -12,6 +12,7 @@ const EV = { id: "EV", text: "EV" } as const;
 const LUMINANCE = { id: "cd/m2", text: "cd/m²" } as const;
 const KILOMETRES = { id: "km", text: "km" } as const;
 const RADIANCE = { id: "nW/(cm2 sr)", text: "nW/(cm² sr)" } as const;
+const LUX = { id: "lx", text: "lx" } as const;
 const SOURCE = "src/engine/babylon/createSkyRuntime.ts";
 const NIGHT_LIGHTS_SOURCE = "src/engine/babylon/createNightLights.ts";
 const whenFixedTime = { id: "sky.time.mode", value: "fixed" } as const;
@@ -507,15 +508,30 @@ export const SKY_PARAMETERS: readonly ParameterSpec[] = [
     source: "src/sky/nightLights.ts",
   },
   {
+    id: "sky.nightLights.switchIlluminance",
+    label: "Lamps switch on below",
+    description: "Each place's lamps are on while the daylight on level ground there, the Sun's and the sky's, is below this, and off while it is above, as a photocell switches a street lamp: on at once at dusk and off at once at dawn, never between, so the line where they switch moves west with the evening. Off, they give no light and the satellite's picture shows none. The Moon, a few tenths of a lux at most, switches none; cloud, which this sky has none of, would switch them earlier.",
+    unit: LUX,
+    kind: "number",
+    bounds: () => ({ min: 1, max: 100 }),
+    step: 0.05,
+    scale: "log2",
+    default: 16,
+    defaultReason: "1.5 footcandles, the turn-on level of photocontrols made to ANSI C136.10, as North America's street lamps are; Britain's switch on at 35 lx. In this sky's clear air, twilight falls to it with the Sun 5° below the horizon, about 24 minutes after sunset at 45° at an equinox.",
+    home: { tab: SKY_TAB, section: "nightLights", level: "all" },
+    appliesLive: true,
+    source: SOURCE,
+  },
+  {
     id: "sky.nightLights.sunBelow",
     label: "Download where the Sun is below",
-    description: "Night light tiles are downloaded, kept on the GPU and read by the terrain's shader only where the Sun is below this height somewhere on them, on ground the viewpoint can see: elsewhere the Sun's and the sky's light is too much brighter than lamps' for theirs to show.",
+    description: "Night light tiles are downloaded, kept on the GPU and read by the terrain's shader only where the Sun is below this height somewhere on them, on ground the viewpoint can see: elsewhere the Sun's and the sky's light is too much brighter than lamps' for theirs to show, and the lamps are off. Above the height they switch on at, their tiles are in before they are.",
     unit: "deg",
     kind: "number",
     bounds: () => ({ min: -18, max: 10 }),
     step: 0.5,
     default: 0,
-    defaultReason: "Sunset: the ground still has hundreds of lux, a hundred times a city centre's lamps, and the tiles are in well before twilight falls to theirs, about 4° below.",
+    defaultReason: "Sunset: the ground still has hundreds of lux, a hundred times a city centre's lamps, and the tiles are in well before the lamps switch on, with the Sun 5° below.",
     home: { tab: SKY_TAB, section: "nightLights", level: "all" },
     appliesLive: true,
     source: "src/sky/nightLights.ts",

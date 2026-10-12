@@ -85,7 +85,7 @@ export function skyReadings(environment: () => SkyEnvironment | null, on: () => 
   ];
 }
 
-/** What the night lights' parameters show beside them: the lamps below the viewpoint, the tiles, and the memory they take. */
+/** What the night lights' parameters show beside them: the lamps below the viewpoint and where they switch, the tiles, and the memory they take. */
 export function nightLightReadings(nightLights: () => SkyNightLights | null): Array<[string, () => string | null]> {
   const mebibytes = (bytes: number): string => `${Number((bytes / 1_048_576).toPrecision(2))} MiB`;
   return [
@@ -98,8 +98,10 @@ export function nightLightReadings(nightLights: () => SkyNightLights | null): Ar
         ? `${state.window ? "" : "Making the first window ready: "}zoom ${square.zoom}, ${state.here} of ${state.needed} tiles needed here${state.loading > 0 ? `, ${state.loading} on their way` : ""}${state.failed > 0 ? `, ${state.failed} failed` : ""}${state.error ? `: ${state.error}` : ""}; ${mebibytes(state.downloadedBytes)} downloaded`
         : "Waiting for a viewpoint on the Earth";
       const lamps = below === null ? "no tile here holds the place below the viewpoint"
-        : `below the viewpoint the satellite saw ${formatLight(below.radiance, "nW/(cm² sr)")}: lamps' light of ${formatLight(below.illuminanceLux, "lx")}, seen at ${formatLight(below.luminance, "cd/m²")}`;
-      return `${tiles}; ${lamps}`;
+        : `below the viewpoint the satellite saw ${formatLight(below.radiance, "nW/(cm² sr)")}: lamps' light of ${formatLight(below.illuminanceLux, "lx")}, seen at ${formatLight(below.luminance, "cd/m²")}, ${below.on ? "on now" : "off now"}`;
+      const height = night.switchSunDeg;
+      const switching = height === null ? "" : `; lamps are on where the Sun is ${Math.abs(height).toFixed(1)}° ${height < 0 ? "below" : "above"} the horizon or lower`;
+      return `${tiles}${switching}; ${lamps}`;
     }],
     ["sky.nightLights.windowTiles", () => {
       const night = nightLights();

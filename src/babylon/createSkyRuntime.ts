@@ -19,7 +19,7 @@ import { ATMOSPHERE, createAtmosphere, type Atmosphere, type Rgb } from "../atmo
 import { lunarEphemeris, type LunarEphemeris } from "../lunarPosition.js";
 import { solarEphemeris, sunDirectionFrom, type SolarEphemeris } from "../solarPosition.js";
 import {
-  adaptEv100, computeSkyIllumination, createSkyDomeGeometry, ev100ForIlluminance, fillSkyDome, groundLightTable, horizonDipDeg, luminance,
+  adaptEv100, computeSkyIllumination, createSkyDomeGeometry, ev100ForIlluminance, fillSkyDome, groundLightSine, groundLightTable, horizonDipDeg, luminance,
   observerAt, parseUtcDate, PHOTOMETRY, starEv100, whiteLuminanceForEv100, type SkyDomeGeometry, type SkyIllumination, type SkyObserver,
 } from "../skyState.js";
 import { illuminancePerRadiance, luminancePerRadiance, radianceAboveFloor, type NightLightPhotometry } from "../nightLights.js";
@@ -28,7 +28,7 @@ import { createGroundLightProbe, type GroundLightProbe } from "./createGroundLig
 import { createNightLights, type NightLights, type NightLightsOptions, type NightLightsState } from "./createNightLights.js";
 import { createStarField, starPixelAngleChanged, starsCouldShow, type StarField, type StarFieldCost } from "./createStarField.js";
 import { cleanupAll } from "./cleanup.js";
-import { DISPLAY_GAMMA } from "../units.js";
+import { DISPLAY_GAMMA, RAD_TO_DEG } from "../units.js";
 import type { SkyTerrainPorts, NightTilePorts, TerrainLighting, TerrainNightLighting } from "./ports.js";
 import type { SkyEcefToGeodetic } from "../skyState.js";
 
@@ -62,6 +62,9 @@ const LEAST_VIEWPOINT_RADIUS_METERS = 1e6;
  * smaller than this is not seen on a surface lit by it.
  */
 const GROUND_READING_CHANGE = 0.02;
+/** Switches' sines above and below any height of the Sun's: lamps on everywhere, and off everywhere. */
+const LAMPS_ALL_ON = 2;
+const LAMPS_ALL_OFF = -2;
 
 export interface SkyCost {
   /** Building the atmosphere's tables, the last time its parameters changed. */
@@ -88,11 +91,18 @@ export interface SkyNightLights {
   /** Their tiles and window: what is downloaded, kept and shown. */
   state: NightLightsState;
   /**
+   * The Sun's height, degrees, at or below which daylight on level ground is
+   * within `sky.nightLights.switchIlluminance`, and lamps are on: each
+   * place's are on or off, never between. Null before the sky is computed.
+   */
+  switchSunDeg: number | null;
+  /**
    * Below the viewpoint: the radiance a tile here holds, nW/(cm² sr); above
    * the floor, the lamps' light on the ground, lux, and the luminance the
-   * satellite saw, cd/m². Null where no tile here holds the place.
+   * satellite saw, cd/m², as they are when on; and whether they are, by the
+   * Sun's height here. Null where no tile here holds the place.
    */
-  below: { radiance: number; illuminanceLux: number; luminance: number } | null;
+  below: { radiance: number; illuminanceLux: number; luminance: number; on: boolean } | null;
 }
 
 export interface SkyEnvironment {
@@ -208,6 +218,7 @@ const PRESENTED_IDS = [
   "sky.surface.albedoScale", "renderer.exposureEV", "sky.stars.mode", "sky.stars.limitingMagnitude", "sky.stars.sizePx",
   "sky.stars.daylightAltitude", "sky.groundLight.mode", "sky.nightLights.mode", "sky.nightLights.colourTemperature",
   "sky.nightLights.floor", "sky.nightLights.radiancePerEmittance", "sky.nightLights.groundReflectance",
+  "sky.nightLights.switchIlluminance",
 ] as const;
 /** Settings the night lights' tiles follow at the next frame: which are downloaded, kept and shown. */
 const NIGHT_LOADING_IDS = [
@@ -309,6 +320,8 @@ export function createSkyRuntime(options: SkyRuntimeOptions): SkyRuntime {
   let nightLights: NightLights | null = null;
   /** The place below the viewpoint the night lights were last looked up at. */
   let nightPlace: SkyObserver | null = null;
+  /** The lamps' switch as a sine of the Sun's height, and what it was found from. */
+  let lampSwitch: { table: Float32Array; solarLux: number; lux: number; sine: number } | null = null;
 
   const stopTimer = (): void => {
     const previous = timer;
@@ -456,27 +469,52 @@ export function createSkyRuntime(options: SkyRuntimeOptions): SkyRuntime {
     previous?.dispose();
   }
 
-  /** The lamps below the viewpoint: the radiance a tile here holds, and above the floor their light and the luminance the satellite saw. */
-  function nightBelow(): SkyNightLights["below"] {
-    const radiance = nightLights && nightPlace ? nightLights.radianceAt(nightPlace.latDeg, nightPlace.lonDeg) : null;
-    if (radiance === null) return null;
-    const photometry = nightPhotometry();
-    const above = radianceAboveFloor(radiance, photometry);
-    return { radiance, illuminanceLux: above * illuminancePerRadiance(photometry), luminance: above * luminancePerRadiance(photometry) };
+  /**
+   * The sine of the Sun's height at or below which lamps are on: where the
+   * table, as the terrain's shader reads it, puts their switch's daylight on
+   * level ground, as a photocell's level. Null before the sky is computed.
+   */
+  function lampSwitchSine(): number | null {
+    if (!groundTable || !illumination) return null;
+    const lux = number("sky.nightLights.switchIlluminance");
+    const solarLux = illumination.solarIlluminanceLux;
+    if (!lampSwitch || lampSwitch.table !== groundTable || lampSwitch.solarLux !== solarLux || lampSwitch.lux !== lux) {
+      lampSwitch = { table: groundTable, solarLux, lux, sine: groundLightSine(groundTable, solarLux, lux) };
+    }
+    return lampSwitch.sine;
   }
 
-  /** The night lights as they are now: their tiles, and the lamps below the viewpoint. */
+  /** Whether a place's lamps are on: the Sun's height there, from the Earth's centre as the shader finds it, at most their switch's. */
+  function lampsOnAt(place: SkyObserver): boolean {
+    const sine = lampSwitchSine();
+    if (sine === null || !illumination) return false;
+    const [x, y, z] = place.ecef;
+    const sun = illumination.sunDirection;
+    return (x * sun[0] + y * sun[1] + z * sun[2]) / Math.hypot(x, y, z) <= sine;
+  }
+
+  /** The lamps below the viewpoint: the radiance a tile here holds, above the floor their light and the luminance the satellite saw, and whether they are on. */
+  function nightBelow(): SkyNightLights["below"] {
+    const radiance = nightLights && nightPlace ? nightLights.radianceAt(nightPlace.latDeg, nightPlace.lonDeg) : null;
+    if (radiance === null || !nightPlace) return null;
+    const photometry = nightPhotometry();
+    const above = radianceAboveFloor(radiance, photometry);
+    return { radiance, illuminanceLux: above * illuminancePerRadiance(photometry), luminance: above * luminancePerRadiance(photometry), on: lampsOnAt(nightPlace) };
+  }
+
+  /** The night lights as they are now: their tiles, their switch, and the lamps below the viewpoint. */
   function readNightLights(): SkyNightLights | null {
     if (disposed) return null;
     const mode = nightLightsMode();
     if (!nightLights || mode === "off") return null;
-    return { mode, state: nightLights.getState(), below: nightBelow() };
+    const sine = lampSwitchSine();
+    return { mode, state: nightLights.getState(), switchSunDeg: sine === null ? null : Math.asin(sine) * RAD_TO_DEG, below: nightBelow() };
   }
 
   /**
    * Keeps the night lights' tiles for the viewpoint while lit imagery shows
    * them. The lamps below light surfaces from beneath as the ground does: a
-   * change there shows the sky again.
+   * change there, or their switching, shows the sky again.
    */
   function updateNightLights(observer: SkyObserver, sun: readonly [number, number, number]): void {
     if (nightLightsMode() === "off" || settings.get("sky.surface.lighting") === "photograph") {
@@ -497,9 +535,10 @@ export function createSkyRuntime(options: SkyRuntimeOptions): SkyRuntime {
     });
     nightLights.update({ latDeg: observer.latDeg, lonDeg: observer.lonDeg, altitudeMeters: observer.altitudeMeters, sun });
     nightPlace = observer;
-    const shown = environment?.nightLights?.below?.luminance ?? null;
-    const below = nightBelow()?.luminance ?? null;
-    if ((shown === null) !== (below === null) || (shown !== null && below !== null && Math.abs(below - shown) > GROUND_READING_CHANGE * Math.max(below, shown))) present = true;
+    const shown = environment?.nightLights?.below ?? null;
+    const below = nightBelow();
+    if ((shown === null) !== (below === null) || (shown !== null && below !== null && (shown.on !== below.on
+      || Math.abs(below.luminance - shown.luminance) > GROUND_READING_CHANGE * Math.max(below.luminance, shown.luminance)))) present = true;
   }
 
   /** Takes the sky out of the scene. Inside a frame's preparation that frame shows it; outside one, a frame is asked for. */
@@ -585,9 +624,10 @@ export function createSkyRuntime(options: SkyRuntimeOptions): SkyRuntime {
   /**
    * The night lights' part of the terrain light, per nW/(cm² sr) above the
    * floor in the lamps' colour: their light on the ground as a factor on
-   * imagery, or the luminance the satellite saw as a linear value.
+   * imagery, or the luminance the satellite saw as a linear value; and
+   * where they are switched on.
    */
-  function nightLighting(mode: Exclude<NightLightsMode, "off">, reflect: number, scale: number, tint: Rgb): TerrainNightLighting {
+  function nightLighting(mode: Exclude<NightLightsMode, "off">, reflect: number, scale: number, tint: Rgb, switchSine: number): TerrainNightLighting {
     const photometry = nightPhotometry();
     const light = mode === "light" ? illuminancePerRadiance(photometry) * reflect : 0;
     const picture = mode === "picture" ? luminancePerRadiance(photometry) * scale : 0;
@@ -600,6 +640,7 @@ export function createSkyRuntime(options: SkyRuntimeOptions): SkyRuntime {
       light: [tint[0] * light, tint[1] * light, tint[2] * light],
       picture: [tint[0] * picture, tint[1] * picture, tint[2] * picture],
       floor: photometry.floor,
+      switchSine,
     };
   }
 
@@ -644,8 +685,8 @@ export function createSkyRuntime(options: SkyRuntimeOptions): SkyRuntime {
     const groundSource = groundLightMode();
     const night = readNightLights();
     const lampTint = blackBodyTint(number("sky.nightLights.colourTemperature"));
-    // Uniform ground sends up, besides the sky's light, the lamps' below as the satellite saw them; a rendered reading sees them drawn.
-    const lamps = night?.below?.luminance ?? 0;
+    // Uniform ground sends up, besides the sky's light, the lamps' below as the satellite saw them while they are on; a rendered reading sees them drawn.
+    const lamps = night?.below?.on ? night.below.luminance : 0;
     const ground: Rgb = groundSource === "off" ? [0, 0, 0]
       : groundSource === "rendered" && groundReading ? groundReading.luminance
         : [state.groundLuminance[0] + lamps * lampTint[0], state.groundLuminance[1] + lamps * lampTint[1], state.groundLuminance[2] + lamps * lampTint[2]];
@@ -663,6 +704,8 @@ export function createSkyRuntime(options: SkyRuntimeOptions): SkyRuntime {
       const centre = world ? Vector3.TransformCoordinates(Vector3.Zero(), world) : Vector3.Zero();
       const moonScene = moon ? toScene(...moon.direction) : sun;
       const nightLight = Math.PI * state.nightLuminance * reflect;
+      // Per point each place's lamps follow the Sun there; one factor for all has them all as they are below the viewpoint.
+      const switchSine = perPoint ? lampSwitchSine() ?? LAMPS_ALL_ON : lampsOnAt(nightPlace ?? state.observer) ? LAMPS_ALL_ON : LAMPS_ALL_OFF;
       const terrain: TerrainLighting = {
         perPoint,
         centre: [centre.x, centre.y, centre.z],
@@ -672,7 +715,7 @@ export function createSkyRuntime(options: SkyRuntimeOptions): SkyRuntime {
         moonScale: moon ? [moon.extraterrestrial[0] * reflect, moon.extraterrestrial[1] * reflect, moon.extraterrestrial[2] * reflect] : [0, 0, 0],
         ambient: perPoint ? [nightLight, nightLight, nightLight] : surfaceFactor,
         table: groundTable,
-        night: night ? nightLighting(night.mode, reflect, scale, lampTint) : null,
+        night: night ? nightLighting(night.mode, reflect, scale, lampTint, switchSine) : null,
       };
       options.terrain.setLighting( terrain);
     } else {

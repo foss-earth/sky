@@ -7,10 +7,12 @@
 import type { AbstractMesh, Mesh, StandardMaterial, Vector3 } from "@babylonjs/core";
 import { DEG_TO_RAD } from "@foss-earth/engine";
 import { DISPLAY_GAMMA } from "@foss-earth/engine/babylon";
-import { createLightPoints, createSkyRuntime, type SkyRuntime, type LightPointsHandle } from "@foss-earth/sky/babylon";
+import { createLightPoints, createSkyRuntime, type SkyRuntime, type LightPointsHandle, type TerrainNightLightMap } from "@foss-earth/sky/babylon";
 import { SKY_PARAMETERS, VIEWPOINT_SURFACE_LIGHTING_CHOICE } from "@foss-earth/sky/settings";
 import { STAR_RECORD_BYTES, STAR_RECORDS } from "@foss-earth/sky/catalogue";
-import { applyMatrix3, celestialToEcefMatrix, decodeStarCatalogue, starDirections, yearsFromJ2000 } from "@foss-earth/sky";
+import {
+  applyMatrix3, celestialToEcefMatrix, decodeStarCatalogue, nightPixelAt, NIGHT_RADIANCE_UNITS, solarPosition, starDirections, yearsFromJ2000,
+} from "@foss-earth/sky";
 import type { SkyRenderHost, SkyValidationBackend } from "./ports.js";
 
 const WIDTH = 512, HEIGHT = 384;
@@ -32,6 +34,21 @@ const TIMES = {
   fullMoon: { "sky.time.mode": "fixed", "sky.time.date": "2026-10-26", "sky.time.utcHours": 6 },
   moonless: { "sky.time.mode": "fixed", "sky.time.date": "2026-10-08", "sky.time.utcHours": 6 },
 } as const;
+
+/** A city centre's radiance as the night lights' tiles clip it, nW/(cm² sr). */
+const LAMP_RADIANCE = 38.2;
+
+/** The fixed time at which the Sun stands at an elevation over a place on the evening of 18 October 2026, found by halving. */
+function eveningWhenSunAt(place: { latDeg: number; lonDeg: number }, elevationDeg: number) {
+  let early = Date.UTC(2026, 9, 18, 22), late = Date.UTC(2026, 9, 19, 2);
+  for (let step = 0; step < 40; step++) {
+    const middle = (early + late) / 2;
+    if (solarPosition({ utcMs: middle, latDeg: place.latDeg, lonDeg: place.lonDeg }).elevationDeg > elevationDeg) early = middle;
+    else late = middle;
+  }
+  const day = Math.floor(late / 86_400_000) * 86_400_000;
+  return { "sky.time.mode": "fixed", "sky.time.date": new Date(day).toISOString().slice(0, 10), "sky.time.utcHours": (late - day) / 3_600_000 };
+}
 
 type Backend = SkyValidationBackend;
 
@@ -124,6 +141,8 @@ export async function run(host: SkyRenderHost, backend: Backend): Promise<Result
     const settings = host.createSettings();
     settings.setMany({ "sky.model": "dome", "sky.dome.zenithSamples": 16, "sky.dome.azimuthSamples": 12, "sky.groundLight.mode": "uniform", ...TIMES.afternoon });
     const catalogue = decodeStarCatalogue(STAR_RECORDS, STAR_RECORD_BYTES);
+    // Night lights the check gives itself, downloading nothing: one radiance everywhere while it sets a map.
+    const lamps: { map: TerrainNightLightMap | null } = { map: null };
     const activeSky = createSkyRuntime({
       scene, settings, getWorldMatrix: () => world, requestRender: host.requestRender, onLightingChange: () => {},
       ecefToGeodetic: host.ecefToGeodetic,
@@ -132,6 +151,12 @@ export async function run(host: SkyRenderHost, backend: Backend): Promise<Result
       isGround: (mesh: AbstractMesh) => mesh === raster || mesh === tile,
       now: host.now, clock: host.clock, timers: host.timers, isHidden: host.isHidden,
       loadStars: () => Promise.resolve(catalogue),
+      createNightLights: options => ({
+        update: () => { options.setNightLightMap(lamps.map); },
+        radianceAt: () => (lamps.map ? LAMP_RADIANCE : null),
+        getState: () => ({ window: null, pending: null, needed: 0, here: 0, loading: 0, failed: 0, memoryBytes: 0, gpuBytes: 0, downloadedBytes: 0, error: null }),
+        dispose: () => { options.setNightLightMap(null); },
+      }),
     });
 
     sky = activeSky;
@@ -247,6 +272,45 @@ export async function run(host: SkyRenderHost, backend: Backend): Promise<Result
       settings.setMany({ "sky.surface.lighting": "daylight", "sky.model": "off" });
       await groundChecks("sky off");
       settings.set("sky.model", "dome");
+
+      // Night lights, switched as a photocell switches street lamps: a city centre's radiance over the tiles around
+      // Minneapolis, at two instants of one dusk with the Sun half a degree above and below the height at which twilight
+      // falls to the switch's 16 lx. Off, the ground has twilight's light alone; on, all of the lamps' too. A fixed
+      // exposure, near white for the ground there, leaves the lamps' share alone to tell the two apart.
+      const exposureBefore = { "sky.exposure.mode": settings.get("sky.exposure.mode"), "sky.exposure.ev100": settings.get("sky.exposure.ev100") };
+      const lampTile = nightPixelAt(MINNEAPOLIS.latDeg, MINNEAPOLIS.lonDeg, 8).tile;
+      // The radiance in red's and green's bytes, in thousandths.
+      const lampUnits = Math.round(LAMP_RADIANCE * NIGHT_RADIANCE_UNITS);
+      const lampTexture = RawTexture.CreateRGBATexture(new Uint8Array([lampUnits >> 8, lampUnits & 255, 0, 255]), 1, 1, scene, false, false, Texture.NEAREST_SAMPLINGMODE);
+      lamps.map = { texture: lampTexture, zoom: 8, x: lampTile.x - 1, y: lampTile.y - 1, tiles: 4 };
+      settings.setMany({ ...TIMES.dusk, "sky.nightLights.mode": "light", "sky.exposure.mode": "fixed", "sky.exposure.ev100": 3 });
+      await frame();
+      const switchDeg = activeSky.getEnvironment()?.nightLights?.switchSunDeg ?? null;
+      if (switchDeg === null) result.errors.push("no lamps' switch in the sky's state with night lights on");
+      else for (const [state, offsetDeg] of [["off", 0.5], ["on", -0.5]] as const) {
+        settings.setMany(eveningWhenSunAt(MINNEAPOLIS, switchDeg + offsetDeg));
+        await frame();
+        const lighting = getTerrainLighting(scene);
+        if (!lighting?.night) {
+          result.errors.push(`lamps ${state}: the terrain's light has no night lights`);
+          continue;
+        }
+        const factor = (point: Vector3, radiance: number): number[] => terrainLightFactor(lighting, getTerrainLocalLights(scene), [point.x, point.y, point.z], radiance);
+        const raster = (point: Vector3, radiance: number): number[] => factor(point, radiance).map(f => 255 * Math.min(1, ALBEDO_ENCODED * f ** (1 / DISPLAY_GAMMA)));
+        const label = `lamps ${state}, the Sun ${Math.abs(switchDeg + offsetDeg).toFixed(1)}° down`;
+        check(`${label}: 2D map tile (standard material)`, raster(onRaster, LAMP_RADIANCE), pixelAt(onRaster), NEAR_TOLERANCE);
+        check(`${label}: unlit glTF tile (PBR material)`, factor(onTile, LAMP_RADIANCE).map(f => encode(ALBEDO_LINEAR * f)), pixelAt(onTile), NEAR_TOLERANCE);
+        // On, the lamps' light is all there and plainly seen; off, none of it is: never a part.
+        const lit = raster(onRaster, LAMP_RADIANCE)[1], dark = raster(onRaster, 0)[1];
+        rule(`${label}: ${state === "on" ? "all of the lamps' light, more than twice the tolerance" : "none of the lamps' light"}`, [lit - dark], [pixelAt(onRaster)[1] - dark],
+          state === "on" ? lit - dark > 2 * NEAR_TOLERANCE : lit === dark);
+        result.notes.push(`${label}: factor ${factor(onRaster, LAMP_RADIANCE).map(value => value.toPrecision(3)).join(", ")}, ${factor(onRaster, 0)[1].toPrecision(3)} without lamps`);
+        shot(`night lights ${state}`);
+      }
+      lamps.map = null;
+      activeSky.update();
+      lampTexture.dispose();
+      settings.setMany(exposureBefore);
 
       // The planet from 20,000 km: day, twilight and night where they are.
       raster.setEnabled(false);

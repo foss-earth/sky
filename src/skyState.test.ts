@@ -4,7 +4,8 @@ import { ATMOSPHERE, createAtmosphere, type Rgb } from "./atmosphere.js";
 import { solarEphemeris, solarPosition, spaRefractionDeg } from "./solarPosition.js";
 import {
   adaptEv100, computeSkyIllumination, createSkyDomeGeometry, drawnRefractionDeg, ev100ForIlluminance, ev100ForWhiteLuminance,
-  fillSkyDome, horizonDipDeg, luminance, observerFromGeodetic, standardAtmosphere, starEv100, whiteLuminanceForEv100, type SkyObserver,
+  fillSkyDome, groundLightAt, groundLightSine, groundLightTable, horizonDipDeg, luminance, observerFromGeodetic, PHOTOMETRY, standardAtmosphere,
+  starEv100, whiteLuminanceForEv100, type SkyObserver,
 } from "./skyState.js";
 
 const atmosphere = createAtmosphere({ aerosolOpticalDepth: 0.1, groundAlbedo: 0.2 });
@@ -188,6 +189,27 @@ describe("sky illumination", () => {
     // A quarter turn of the Earth earlier, a quarter of the way round: the Sun's own motion in six hours is all that differs.
     expect(there.sunElevationDeg).toBeCloseTo(here.sunElevationDeg, 0);
     expect(luminance(there.sunIlluminance) / luminance(here.sunIlluminance)).toBeCloseTo(1, 1);
+  });
+});
+
+describe("light on level ground", () => {
+  it("finds the Sun's height at which the table puts a daylight on level ground, as a photocell's level", () => {
+    const table = groundLightTable(atmosphere);
+    const solar = PHOTOMETRY.solarIlluminanceLux;
+    const lux = (mu: number): number => luminance(groundLightAt(table, mu)) * solar;
+    for (const level of [1, 16, 35, 100, 1000, 50_000]) {
+      const mu = groundLightSine(table, solar, level);
+      expect(lux(mu) / level, `${level} lx`).toBeCloseTo(1, 9);
+      // Less just below it and more just above: the light grows with the Sun's height.
+      expect(lux(mu - 1e-6)).toBeLessThan(level);
+      expect(lux(mu + 1e-6)).toBeGreaterThan(level);
+    }
+    // A North American photocell's 16 lx is twilight with the Sun 5° down in this clear air, 35 lx about 4.3°.
+    expect(Math.asin(groundLightSine(table, solar, 16)) / DEG_TO_RAD).toBeCloseTo(-5, 0);
+    expect(Math.asin(groundLightSine(table, solar, 35)) / DEG_TO_RAD).toBeCloseTo(-4.3, 0);
+    // More than the Sun overhead gives is never reached; none, only below the table's fade.
+    expect(groundLightSine(table, solar, 1e9)).toBe(1);
+    expect(groundLightSine(table, solar, 0)).toBeCloseTo(Math.sin(-20 * DEG_TO_RAD), 12);
   });
 });
 

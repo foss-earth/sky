@@ -844,11 +844,12 @@ describe("sky runtime", () => {
     expect(Math.hypot(...view.sun)).toBeCloseTo(1, 9);
     expect(view.sun[0] * up[0] + view.sun[1] * up[1] + view.sun[2] * up[2]).toBeLessThan(-0.6);
 
-    // 20 nW/(cm² sr) above the floor: lamps' light of π × 20 / (431 × 0.15) lx on the ground, seen from above at 20 / 431 cd/m².
+    // 20 nW/(cm² sr) above the floor: lamps' light of π × 20 / (431 × 0.15) lx on the ground, seen from above at 20 / 431 cd/m²,
+    // switched on, as they are where twilight has fallen below 16 lx, with the Sun 5° down.
     const sky = h.sky.getEnvironment()!;
     expect(sky.nightLights).toEqual({
-      mode: "light", state: night.state,
-      below: { radiance: 20.5, illuminanceLux: expect.closeTo((Math.PI * 20) / (431 * 0.15), 9), luminance: expect.closeTo(20 / 431, 12) },
+      mode: "light", state: night.state, switchSunDeg: expect.closeTo(-5, 0),
+      below: { radiance: 20.5, illuminanceLux: expect.closeTo((Math.PI * 20) / (431 * 0.15), 9), luminance: expect.closeTo(20 / 431, 12), on: true },
     });
     // Each unit of radiance lights the imagery in the lamps' colour as their lux do, reflected 1.5 × over π, over white.
     const tint = blackBodyTint(3000);
@@ -858,6 +859,7 @@ describe("sky runtime", () => {
     expect(terrain.night!.picture).toEqual([0, 0, 0]);
     expect(terrain.night!.floor).toBe(0.5);
     expect(terrain.night!.axes).toEqual([[1, 0, 0], [0, 1, 0], [0, 0, 1]]);
+    expect(terrain.night!.switchSine).toBeCloseTo(Math.sin(sky.nightLights!.switchSunDeg! * DEG_TO_RAD), 12);
     // Light from the ground, as uniform, carries the lamps below as the satellite saw them.
     const ground = h.fill().groundColor;
     expect(luminance([ground.r, ground.g, ground.b]) * sky.whiteLuminance).toBeCloseTo(luminance(sky.illumination.groundLuminance) + 20 / 431, 9);

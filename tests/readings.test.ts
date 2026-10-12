@@ -59,12 +59,20 @@ describe("supplied Sky readings and notes", () => {
         loading: 1, failed: 1, error: "missing", downloadedBytes: 2 * 1_048_576,
         gpuBytes: 0, memoryBytes: 1_048_576,
       } as SkyNightLights["state"],
-      below: { radiance: 2, illuminanceLux: 0.1, luminance: 0.01 },
+      switchSunDeg: -5.007,
+      below: { radiance: 2, illuminanceLux: 0.1, luminance: 0.01, on: false },
     };
     const detach = bindSkyReadingsAndNotes({ settings, sky: { getEnvironment: () => null, getNightLights: () => night } });
     expect(settings.getReading("sky.nightLights.mode")).toContain("Making the first window ready");
     expect(settings.getReading("sky.nightLights.mode")).toContain("2 nW/(cm² sr)");
     expect(settings.getReading("sky.nightLights.mode")).toContain("0.1 lx");
+    // Where they switch, and whether those below are on now: read again, not kept.
+    expect(settings.getReading("sky.nightLights.mode")).toContain("lamps are on where the Sun is 5.0° below the horizon or lower");
+    expect(settings.getReading("sky.nightLights.mode")).toContain("0.01 cd/m², off now");
+    night = { ...night, below: { ...night.below!, on: true } };
+    expect(settings.getReading("sky.nightLights.mode")).toContain("0.01 cd/m², on now");
+    night = { ...night, switchSunDeg: null };
+    expect(settings.getReading("sky.nightLights.mode")).not.toContain("lamps are on where");
     expect(settings.getReading("sky.nightLights.memory")).toBe("1 MiB kept");
     night = null;
     expect(settings.getReading("sky.nightLights.mode")).toBeNull();

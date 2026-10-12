@@ -642,12 +642,35 @@ The lamps' colour is a black body at `sky.nightLights.colourTemperature`, 3,000 
 of luminance 1 relative to sunlight (`blackBodyTint`): the band has no colour, so
 the colour is the same everywhere.
 
+**Switching.** Lamps are on or off, never between, as photocells switch street
+lamps. A place's lamps are on while the daylight on level ground there, the Sun's
+and the sky's by the [table](#ground) the terrain's shader reads, is below
+`sky.nightLights.switchIlluminance`, and off while it is above. The default, 16 lx,
+is 1.5 footcandles, the turn-on level of photocontrols made to ANSI C136.10, as
+North America's street lamps are; Britain's switch on at 35 lx and off at 18. In
+this sky's clear air, twilight falls to 16 lx with the Sun 5.0° below the horizon,
+about 24 minutes after sunset at 45° at an equinox, and to 35 lx at 4.3°. The light
+grows with the Sun's height, so a level is one height, found from the table by
+halving (`groundLightSine`); the shader compares the sine of the Sun's height at
+each pixel's place, seen from the Earth's centre, with that height's: a dot product
+and a step. The line where lamps switch moves west with dusk and dawn, and a city's
+lamps come on within a minute or two of each other.
+
+One level serves dusk and dawn, where a photocell turns off at up to 1.5 times its
+turn-on level (ANSI) or at half of it (Britain): minutes of twilight either way. The
+Moon, a few tenths of a lux at most, switches no lamp. This sky has no cloud, under
+which lamps come on earlier. With one factor for all imagery, every lamp is as those
+below the viewpoint are. Off, lamps give no light and the satellite's picture shows
+none. Lamps that were on at every hour showed only as twilight faded, and so seemed
+to come on slowly.
+
 **Shader.** The [terrain light](#ground) reads radiance at each pixel's place.
 The point's latitude on the ellipsoid, atan(z, (1 − e²) p), is exact on the
 surface; with its longitude it gives Web Mercator coordinates in tiles of the
 window's zoom. Light adds (R − floor) × π ÷ (k G) × `sky.surface.albedoScale` ÷ π
 ÷ white, in the lamps' colour, to the factor on the imagery's linear colour. The
-picture adds (R − floor) ÷ k ÷ white to the linear colour itself. The standard
+picture adds (R − floor) ÷ k ÷ white to the linear colour itself. Each adds only
+where the lamps are [switched on](#night-lights), by the Sun's height there. The standard
 material holds colour display-encoded, so it decodes, sums and encodes again. Cost
 a pixel: one texture read and a few dozen operations. Google 3D Tiles whose
 materials are unlit get the same, through the same plugin. The shader has the
@@ -672,7 +695,8 @@ lights may shimmer near the horizon. At 8 × 8 it is 16 MiB.
 - A tile is downloaded only when it is within the horizon's distance and the Sun is
   below `sky.nightLights.sunBelow` (0°) somewhere on it: on a 5 × 5 grid of its
   points, or where the point opposite the Sun is on it. By day nothing is
-  downloaded.
+  downloaded. Above the height lamps switch at, a tile is in before its lamps come
+  on.
 - Downloads go nearest first, at most `map.imagery.concurrentRequests` at once. A
   failure is tried again after `map.retryDelay`, doubling. A tile GIBS refuses
   (400, 404, 204) or of the wrong size is not asked for again. A view that moves on
@@ -685,10 +709,12 @@ lights may shimmer near the horizon. At 8 × 8 it is 16 MiB.
   made ready are kept beyond it.
 - Without `createImageBitmap`, as outside a browser, nothing is downloaded.
 
-**Below the viewpoint.** The radiance there, the lamps' light and the luminance seen
-are in `SkyEnvironment.nightLights` with the tiles' state, and beside the mode. With
-the light from the ground uniform, the lamps' luminance below is added to it;
-rendered, it is drawn. A change of more than 2% shows the sky again.
+**Below the viewpoint.** The radiance there, the lamps' light and the luminance seen,
+whether the lamps there are on, and the Sun's height lamps switch at are in
+`SkyEnvironment.nightLights` with the tiles' state, and beside the mode. With the
+light from the ground uniform, the lamps' luminance below is added to it while they
+are on; rendered, it is drawn. A change of more than 2%, or the lamps switching,
+shows the sky again.
 
 **Exposure.** At night the meter holds at its range's dark end, EV 1, where white is
 2.4 cd/m². Imagery at full white under a clipped centre's 1.8 lx then shows at about
@@ -793,6 +819,7 @@ Every parameter has one home.
 | | `sky.nightLights.floor` | nW/(cm² sr), 0 to 10 | 0.5 |
 | | `sky.nightLights.radiancePerEmittance` | nW/(cm² sr) per lm/m², 100 to 2,000 | 431 |
 | | `sky.nightLights.groundReflectance` | fraction, 0.02 to 0.8; shown for the lamps' light | 0.15 |
+| | `sky.nightLights.switchIlluminance` | lx, 1 to 100 | 16 |
 | | `sky.nightLights.sunBelow` | degrees, −18 to 10 | 0 |
 | | `sky.nightLights.maxZoom` | levels, 0 to 8 | 8 |
 | | `sky.nightLights.windowTiles` | count, 2 to 16 and the renderer's largest texture | 8 |
@@ -844,7 +871,7 @@ Off, gives the old picture.
   `moonIlluminanceLux` and `MOONLIGHT_TINT`. The stars: `loadStarCatalogue`,
   `starDirections`, `starIlluminanceLux`, `starTint`, `precessionMatrix` and
   `celestialToEcefMatrix`. The ground's table: `groundLightTable`, `groundLightAt`,
-  `groundLightWeight` and `GROUND_LIGHT_TABLE`. And `starEv100`, the stars'
+  `groundLightWeight`, `groundLightSine` and `GROUND_LIGHT_TABLE`. And `starEv100`, the stars'
   exposure by height, with `horizonDipDeg`. The night lights: `nightLightTileUrl`,
   `isNightLightDate`, `RADIANCE_BY_GREY` and `radianceOfGrey`,
   `illuminancePerRadiance`, `luminancePerRadiance` and `radianceAboveFloor`,
@@ -929,7 +956,9 @@ Verified on the CPU and in NullEngine:
   none for a refusal; memory trimmed outside the windows in use; another night
   starting again, and a date that is none. The shader's mapping of a point against
   the tiles', and its code in GLSL and WGSL; its define and uniforms; the sky's
-  light, picture and light from below.
+  light, picture and light from below. The lamps switched on and off by the Sun's
+  height, at the height the table gives a level of daylight, below the viewpoint,
+  on the map and in the readings.
 - Light points: I ÷ d² over a square's solid angle, over white; a point dark from
   behind its lamp.
 - Lifecycle: computed once per change; the clock's frames and their stopping;
@@ -964,6 +993,10 @@ each of WebGL 2, WebGL 1 and WebGPU, all passed. Retained run:
   with a quarter Moon up, under a full Moon, under the night sky alone, with a
   1,000 cd beam from 30 m above it, lit as at the viewpoint, as photographed, and
   with the sky off.
+- Night lights as photocells switch them: a city centre's radiance over Minneapolis
+  at dusk, at a fixed exposure, with the Sun half a degree above and below the
+  height of the switch's 16 lx: none of the lamps' light, then all of it, within 4
+  of 255 of the model.
 - The planet from 20,000 km, at nine longitudes along 30° N from the afternoon
   across the terminator into the night, within 8 of 255.
 - The full Moon's disc at white, and the sky 10° from it lit and far under white.
@@ -1058,8 +1091,8 @@ source calibration and the audiovisual timing of A/B switching, stays in 0sfs.
   Tiles in the live app at night: whether their materials are lit, and how the
   ground then looks.
 - Tune `sky.exposure.adaptation` and the stars' size by eye.
-- Look at the [night lights](#night-lights) on a GPU, where nothing has drawn them
-  yet, and decide by eye: whether the meter should read the lamps, so that a city
+- Look at the [night lights](#night-lights) in the live app on a GPU, where the
+  drawn-pixel check has drawn only one radiance, and decide by eye: whether the meter should read the lamps, so that a city
   at night is shown brighter than its surroundings' darkness allows now; and
   whether Google 3D Tiles should get them only at their finest detail, as first
   proposed, where they now get them wherever their materials are unlit.

@@ -54,6 +54,13 @@ export interface TerrainNightLighting {
   picture: Readonly<Rgb>;
   /** Radiance taken as no lamp's, nW/(cm² sr). */
   floor: number;
+  /**
+   * The sine of the Sun's height at or below which lamps are on, as a
+   * photocell switches them where daylight has fallen to its level: each
+   * place's lamps are on or off, never between. Above 1 they are on
+   * everywhere, and below -1 nowhere.
+   */
+  switchSine: number;
 }
 
 /**
