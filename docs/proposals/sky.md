@@ -110,12 +110,12 @@ name.
 | Rung | `sky.model` | Adds | Recomputed when the Sun or height moves | Every frame | GPU resources | Runs on |
 | --- | --- | --- | --- | --- | --- | --- |
 | 0 | `off` | Nothing: the fixed background and the fill lights, as before | Nothing | Nothing | None | Anything |
-| 1 | `lights` | A light for the Sun, or for the Moon when it gives more; a sky light; a background colour; map imagery lit by each point's own Sun and Moon; metered exposure | 192 lines of sight, and as many for the Moon: 1 ms | Two lights in each lit material's shader; in map imagery's, two table look-ups a pixel | A table of 27 samples in the imagery shader's uniforms | Any WebGL 1 device |
-| 2 | `dome` | The sky, the Sun's disc and the Moon's with its phase as one mesh with a colour per vertex; the stars as a second | 1,387 more lines of sight at the defaults: 3 ms. On a night with the Moon up, 2,688 more for the sky it lights: 8 ms in all. The stars' places and colours: 2.5 ms | Two draw calls: 5,532 triangles, and 16,808 for 8,404 stars while any is bright enough to show | A 78 KiB vertex buffer, and the stars' 1.35 MiB of buffers and one 4 KiB texture. No render target or shader of its own | Any WebGL 1 device |
+| 1 | `lights` | A light for the Sun, or for the Moon when it gives more; a sky light; a background colour; map imagery lit by each point's own Sun and Moon; metered exposure | 192 directions on 12 lines of sight, and as many for the Moon: 0.3 ms | Two lights in each lit material's shader; in map imagery's, two table look-ups a pixel | A table of 27 samples in the imagery shader's uniforms | Any WebGL 1 device |
+| 2 | `dome` | The sky, the Sun's disc and the Moon's with its phase as one mesh with a colour per vertex; the stars as a second | 1,387 more directions on 43 lines of sight at the defaults: 1 ms. On a night with the Moon up, 2,688 more for the sky it lights: 2.3 ms in all. The stars' places and colours: 0.8 ms | Two draw calls: 5,532 triangles, and 16,808 for 8,404 stars while any is bright enough to show | A 78 KiB vertex buffer, and the stars' 1.35 MiB of buffers and one 4 KiB texture. No render target or shader of its own | Any WebGL 1 device |
 | 3, planned | | The sky computed per pixel from a sky-view table on the GPU, and aerial perspective: distant terrain hazed and coloured by the air between | Table passes | Lookups per pixel | Half-float render targets | WebGL 2, WebGPU |
 | 4, planned | | Volumetric clouds, ray-marched at reduced resolution and reconstructed over frames | | Compute passes | 3D textures | WebGPU |
 
-Shared by rungs 1 to 4: the atmosphere's tables, 106 KiB, built in about 65 ms
+Shared by rungs 1 to 4: the atmosphere's tables, 106 KiB, built in about 50 ms
 when the haze or the ground albedo changes; the Sun's position, 6 µs; and the
 Moon's, 11 µs. Milliseconds are single-threaded JavaScript on the development Mac
 while in use, not qualified measurements (`cost.qualified: false` in the

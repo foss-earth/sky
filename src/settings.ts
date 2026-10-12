@@ -95,7 +95,7 @@ export const SKY_PARAMETERS: readonly ParameterSpec[] = [
     kind: "choice",
     choices: [
       { id: "off", label: "Off", description: "The fixed background and relative fill light. No cost." },
-      { id: "lights", label: "Lights", description: "A Sun light, a sky light and a background colour from the atmosphere model. Nothing more is drawn; 192 lines of sight through the model each time the Sun or the height changes." },
+      { id: "lights", label: "Lights", description: "A Sun light, a sky light and a background colour from the atmosphere model. Nothing more is drawn; 192 directions on 12 lines of sight through the model each time the Sun or the height changes." },
       { id: "dome", label: "Dome", description: "Lights, and the sky drawn as one mesh with a colour per vertex and no texture: one draw call a frame, and the dome's samples each time the Sun or the height changes." },
     ],
     default: "dome",
@@ -249,7 +249,7 @@ export const SKY_PARAMETERS: readonly ParameterSpec[] = [
     bounds: () => ({ min: 8, max: 128 }),
     step: 1,
     default: 32,
-    defaultReason: "A horizon band sampled every quarter of a degree at its closest, for about 1,400 samples: 2 to 3 ms on a laptop each time the Sun or the height changes.",
+    defaultReason: "A horizon band sampled every quarter of a degree at its closest, for about 1,400 samples: about 1 ms on a laptop each time the Sun or the height changes.",
     home: { tab: SKY_TAB, section: "atmosphere", level: "all" },
     appliesLive: true,
     source: "src/sky/skyState.ts",
