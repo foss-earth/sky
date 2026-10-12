@@ -375,6 +375,13 @@ export function createSkyRuntime(options: SkyRuntimeOptions): SkyRuntime {
     return (world ? Vector3.TransformNormal(vector, world) : vector).normalize();
   }
 
+  /** toScene into one vector, used again for each star: the star field reads a direction before it asks for the next. */
+  const starDirection = new Vector3();
+  function starToScene(x: number, y: number, z: number): Vector3 {
+    const world = options.getWorldMatrix();
+    return (world ? Vector3.TransformNormalFromFloatsToRef(x, y, z, world, starDirection) : starDirection.copyFromFloats(x, y, z)).normalize();
+  }
+
   /** A measure of the air's density at a height that changes by about one for each e-fold, up to the top of the air: above it there is none to thin. */
   const densityMeasure = (altitudeMeters: number): number => {
     const h = Math.min(ATMOSPHERE.thicknessMeters, Math.max(0, altitudeMeters));
@@ -818,7 +825,7 @@ export function createSkyRuntime(options: SkyRuntimeOptions): SkyRuntime {
       atmosphere,
       solarIlluminanceAt1AuLux: PHOTOMETRY.solarIlluminanceLux,
       scale,
-      toScene,
+      toScene: starToScene,
       limitingMagnitude: number("sky.stars.limitingMagnitude"),
       sizePx: number("sky.stars.sizePx"),
       pixelAngle: starPixelAngle,

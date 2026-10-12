@@ -1,7 +1,7 @@
-import { Color3, Constants, Material, Mesh, RawTexture, StandardMaterial, Texture, Vector3, VertexBuffer, type Scene } from "@babylonjs/core";
+import { Color3, Constants, Material, Mesh, RawTexture, StandardMaterial, Texture, VertexBuffer, type Scene, type Vector3 } from "@babylonjs/core";
 import type { Atmosphere, Rgb } from "../atmosphere.js";
 import type { SkyObserver } from "../skyState.js";
-import { applyMatrix3, starDirections, starIlluminanceLux, starTint, type Matrix3, type StarCatalogue } from "../stars.js";
+import { starDirections, starIlluminanceLux, starTint, type Matrix3, type StarCatalogue } from "../stars.js";
 import { DISPLAY_GAMMA } from "../units.js";
 import { cleanupAll } from "./cleanup.js";
 
@@ -9,6 +9,8 @@ import { cleanupAll } from "./cleanup.js";
 const STAR_RADIUS_METERS = 1e10;
 /** The texture each star's light is spread over: a Gaussian across a square, sides in texels and its width in half-sides. */
 const STAR_IMAGE = { texels: 32, sigma: 0.4 } as const;
+/** A star's square's corners, in its two directions across the line of sight. */
+const CORNERS = [-1, -1, 1, -1, 1, 1, -1, 1] as const;
 /**
  * A star's square is redrawn for a new field of view or render height only
  * when a pixel's angle has changed by more than this share: nothing seen
@@ -140,6 +142,11 @@ export function createStarField(scene: Scene, options: { clock(): number }): Sta
   let colors = new Float32Array(0);
   let built = 0;
   let disposed = false;
+  // What does not change for a star while its catalogue and the Sun's light do not: its tint, and its light above the air.
+  let lightOf: { catalogue: StarCatalogue; solarIlluminanceAt1AuLux: number; stars: number } | null = null;
+  let tints = new Float64Array(0);
+  let lux = new Float64Array(0);
+  const transmittance: Rgb = [0, 0, 0];
 
   function build(count: number): void {
     positions = new Float32Array(count * 12);
@@ -147,9 +154,11 @@ export function createStarField(scene: Scene, options: { clock(): number }): Sta
     const uvs = new Float32Array(count * 8);
     const indices = new Uint32Array(count * 6);
     for (let star = 0; star < count; star++) {
-      uvs.set([0, 0, 1, 0, 1, 1, 0, 1], star * 8);
-      const at = star * 4;
-      indices.set([at, at + 1, at + 2, at, at + 2, at + 3], star * 6);
+      const uv = star * 8;
+      uvs[uv + 2] = 1; uvs[uv + 4] = 1; uvs[uv + 5] = 1; uvs[uv + 7] = 1;
+      const at = star * 4, index = star * 6;
+      indices[index] = at; indices[index + 1] = at + 1; indices[index + 2] = at + 2;
+      indices[index + 3] = at; indices[index + 4] = at + 2; indices[index + 5] = at + 3;
     }
     mesh.setVerticesData(VertexBuffer.PositionKind, positions, true);
     mesh.setVerticesData(VertexBuffer.ColorKind, colors, true, 4);
@@ -177,37 +186,59 @@ export function createStarField(scene: Scene, options: { clock(): number }): Sta
       const half = (view.sizePx / 2) * view.pixelAngle;
       const solidAngle = (2 * half) ** 2;
       const toValue = view.scale / (solidAngle * image.mean);
-      const transmittance: Rgb = [0, 0, 0];
       const up = view.observer.up;
       const altitude = Math.max(0, view.observer.altitudeMeters);
+      const { catalogue, solarIlluminanceAt1AuLux } = view;
+      if (!lightOf || lightOf.catalogue !== catalogue || !Object.is(lightOf.solarIlluminanceAt1AuLux, solarIlluminanceAt1AuLux) || lightOf.stars < count) {
+        tints = new Float64Array(count * 3);
+        lux = new Float64Array(count);
+        for (let star = 0; star < count; star++) {
+          const tint = starTint(catalogue.colourIndex[star]);
+          tints[star * 3] = tint[0]; tints[star * 3 + 1] = tint[1]; tints[star * 3 + 2] = tint[2];
+          lux[star] = starIlluminanceLux(catalogue.vmag[star], solarIlluminanceAt1AuLux);
+        }
+        lightOf = { catalogue, solarIlluminanceAt1AuLux, stars: count };
+      }
+      const m = view.toEcef;
       let brightest = 0;
+      // Babylon's Vector3.Cross, normalize and scaleInPlace, written out with their operations in their order.
       for (let star = 0; star < count; star++) {
-        const [x, y, z] = applyMatrix3(view.toEcef, directions[star * 3], directions[star * 3 + 1], directions[star * 3 + 2]);
+        const sx = directions[star * 3], sy = directions[star * 3 + 1], sz = directions[star * 3 + 2];
+        const x = m[0] * sx + m[1] * sy + m[2] * sz;
+        const y = m[3] * sx + m[4] * sy + m[5] * sz;
+        const z = m[6] * sx + m[7] * sy + m[8] * sz;
         const d = view.toScene(x, y, z);
-        // Two directions across the line of sight, for the square's corners.
-        let e1 = Vector3.Cross(d, Math.abs(d.y) < 0.9 ? Vector3.UpReadOnly : Vector3.RightReadOnly).normalize();
-        const e2 = Vector3.Cross(d, e1);
-        e1 = e1.scaleInPlace(half);
-        e2.scaleInPlace(half);
-        const corners = [[-1, -1], [1, -1], [1, 1], [-1, 1]] as const;
-        corners.forEach(([s, t], corner) => {
+        const dx = d.x, dy = d.y, dz = d.z;
+        // Two directions across the line of sight, for the square's corners: e1 = d × (up, or right near the poles), normalized, and e2 = d × e1.
+        const across = Math.abs(dy) < 0.9;
+        const rx = across ? 0 : 1, ry = across ? 1 : 0, rz = 0;
+        let ax = dy * rz - dz * ry, ay = dz * rx - dx * rz, az = dx * ry - dy * rx;
+        const length = Math.sqrt(ax * ax + ay * ay + az * az);
+        if (!(length === 0 || length === 1.0)) {
+          const inverse = 1.0 / length;
+          ax *= inverse; ay *= inverse; az *= inverse;
+        }
+        let bx = dy * az - dz * ay, by = dz * ax - dx * az, bz = dx * ay - dy * ax;
+        ax *= half; ay *= half; az *= half;
+        bx *= half; by *= half; bz *= half;
+        for (let corner = 0; corner < 4; corner++) {
+          const s = CORNERS[corner * 2], t = CORNERS[corner * 2 + 1];
           const at = (star * 4 + corner) * 3;
-          positions[at] = (d.x + s * e1.x + t * e2.x) * STAR_RADIUS_METERS;
-          positions[at + 1] = (d.y + s * e1.y + t * e2.y) * STAR_RADIUS_METERS;
-          positions[at + 2] = (d.z + s * e1.z + t * e2.z) * STAR_RADIUS_METERS;
-        });
+          positions[at] = (dx + s * ax + t * bx) * STAR_RADIUS_METERS;
+          positions[at + 1] = (dy + s * ay + t * by) * STAR_RADIUS_METERS;
+          positions[at + 2] = (dz + s * az + t * bz) * STAR_RADIUS_METERS;
+        }
         // Its light through the air: none below the horizon.
         view.atmosphere.sunTransmittance(altitude, x * up[0] + y * up[1] + z * up[2], transmittance);
-        const light = starIlluminanceLux(view.catalogue.vmag[star], view.solarIlluminanceAt1AuLux) * toValue;
-        const tint = starTint(view.catalogue.colourIndex[star]);
-        const value: Rgb = [light * tint[0] * transmittance[0], light * tint[1] * transmittance[1], light * tint[2] * transmittance[2]];
-        brightest = Math.max(brightest, value[0], value[1], value[2]);
+        const light = lux[star] * toValue;
+        const v0 = light * tints[star * 3] * transmittance[0];
+        const v1 = light * tints[star * 3 + 1] * transmittance[1];
+        const v2 = light * tints[star * 3 + 2] * transmittance[2];
+        brightest = Math.max(brightest, v0, v1, v2);
+        const c0 = v0 ** (1 / DISPLAY_GAMMA), c1 = v1 ** (1 / DISPLAY_GAMMA), c2 = v2 ** (1 / DISPLAY_GAMMA);
         for (let corner = 0; corner < 4; corner++) {
           const at = (star * 4 + corner) * 4;
-          colors[at] = value[0] ** (1 / DISPLAY_GAMMA);
-          colors[at + 1] = value[1] ** (1 / DISPLAY_GAMMA);
-          colors[at + 2] = value[2] ** (1 / DISPLAY_GAMMA);
-          colors[at + 3] = 1;
+          colors[at] = c0; colors[at + 1] = c1; colors[at + 2] = c2; colors[at + 3] = 1;
         }
       }
       const visible = brightest >= VISIBLE_SHARE;
@@ -222,6 +253,9 @@ export function createStarField(scene: Scene, options: { clock(): number }): Sta
       if (disposed) return;
       disposed = true;
       directions = null;
+      lightOf = null;
+      tints = new Float64Array(0);
+      lux = new Float64Array(0);
       positions = new Float32Array(0);
       colors = new Float32Array(0);
       cleanupAll("Sky star field disposal failed.", [
