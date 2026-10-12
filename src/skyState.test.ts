@@ -1,6 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { createHash } from "node:crypto";
+import { describe, expect, it, vi } from "vitest";
 import { DEG_TO_RAD } from "./units.js";
 import { ATMOSPHERE, createAtmosphere, type Rgb } from "./atmosphere.js";
+import { lunarEphemeris } from "./lunarPosition.js";
 import { solarEphemeris, solarPosition, spaRefractionDeg } from "./solarPosition.js";
 import {
   adaptEv100, computeSkyIllumination, createSkyDomeGeometry, drawnRefractionDeg, ev100ForIlluminance, ev100ForWhiteLuminance,
@@ -291,5 +293,62 @@ describe("sky dome", () => {
     expect(elevations.some(elevation => Math.abs(elevation + dip) < 1e-3)).toBe(true);
     // Overhead there is no air: only the night sky's luminance.
     expect(dome.luminances[1]).toBeCloseTo(2e-4, 9);
+  });
+});
+
+describe("sky dome, a row at a time", () => {
+  // Minneapolis at 600 m: by day, at dusk with the Moon up, and at night under a full Moon.
+  const latDeg = 44.977753, lonDeg = -93.265011, altitude = 600;
+  const s = Math.sin(latDeg * DEG_TO_RAD), n = 6378137 / Math.sqrt(1 - 0.00669437999014 * s * s);
+  const observer = observerFromGeodetic([
+    (n + altitude) * Math.cos(latDeg * DEG_TO_RAD) * Math.cos(lonDeg * DEG_TO_RAD),
+    (n + altitude) * Math.cos(latDeg * DEG_TO_RAD) * Math.sin(lonDeg * DEG_TO_RAD),
+    (n * (1 - 0.00669437999014) + altitude) * s,
+  ], { latRad: latDeg * DEG_TO_RAD, lonRad: lonDeg * DEG_TO_RAD, altMeters: altitude });
+  const illuminationOn = (iso: string, through = atmosphere) => {
+    const utcMs = Date.parse(iso), sun = solarEphemeris(utcMs);
+    return computeSkyIllumination(through, sun, observer, { nightLuminance: 2e-4, lunar: lunarEphemeris(utcMs, sun) });
+  };
+  const digest = (dome: ReturnType<typeof createSkyDomeGeometry>, state: ReturnType<typeof illuminationOn>) => createHash("sha256")
+    .update(new Uint8Array(dome.directions.buffer)).update(new Uint8Array(dome.luminances.buffer))
+    .update(new Uint8Array(new Float64Array([...state.skyIlluminance, ...state.sunIlluminance, ...(state.moon?.skyIlluminance ?? [])]).buffer))
+    .digest("hex");
+  // What the code gave when it marched every vertex's ray on its own.
+  const PINNED: [string, string, number, number][] = [
+    ["2026-10-25T18:00:00Z", "af25badecc5a6e01d35d588fc26cf5ecbddabc6222e3d9cedbbf149396e816ed", 580, 0],
+    ["2026-10-26T00:00:00Z", "1d38f0d99e60ceaf6c7db0810dcd69062feab4cb7eebca95e378276229cedc3e", 1669, 1088],
+    ["2026-10-26T06:00:00Z", "e55f9163b39852294334d93bce7362b90dc874de28d905d9b4c169f18f34f5d9", 1669, 1088],
+  ];
+
+  it("gives the bits that sampling each vertex on its own gave", () => {
+    const dome = createSkyDomeGeometry({ zenithSamples: 24, azimuthSamples: 16, integrationSteps: 16 });
+    for (const [iso, expected, evaluations, moonEvaluations] of PINNED) {
+      const state = illuminationOn(iso);
+      fillSkyDome(dome, atmosphere, state);
+      expect([digest(dome, state), dome.evaluations, dome.moonEvaluations], iso).toEqual([expected, evaluations, moonEvaluations]);
+    }
+  });
+
+  it("gives the same from an atmosphere it has no fan for, sampled ray by ray", () => {
+    const copy = { ...atmosphere };
+    const dome = createSkyDomeGeometry({ zenithSamples: 24, azimuthSamples: 16, integrationSteps: 16 });
+    for (const [iso, expected] of PINNED) {
+      const state = illuminationOn(iso, copy);
+      fillSkyDome(dome, copy, state);
+      expect(digest(dome, state), iso).toBe(expected);
+    }
+  });
+
+  it("marches only the Sun's and the Moon's discs ray by ray from an atmosphere createAtmosphere made", () => {
+    const dome = createSkyDomeGeometry({ zenithSamples: 24, azimuthSamples: 16, integrationSteps: 16 });
+    const state = illuminationOn(PINNED[2][0]);
+    const rays = vi.spyOn(atmosphere, "radiance");
+    try {
+      fillSkyDome(dome, atmosphere, state);
+      // The Sun's disc, and the sky behind the Moon's lit by the Sun and by the Moon.
+      expect(rays).toHaveBeenCalledTimes(3);
+    } finally {
+      rays.mockRestore();
+    }
   });
 });

@@ -121,6 +121,23 @@ export interface Atmosphere {
   groundSkyIrradiance(muSun: number, out: Rgb): Rgb;
 }
 
+/**
+ * `Atmosphere.radiance` along one line of sight for `count` directions to the
+ * Sun at the same height above the horizon: `nus[k]` is the cosine of the angle
+ * between the line and the Sun, and `out` gets three values for each.
+ */
+export type RadianceFan = (altitudeMeters: number, mu: number, muSun: number, nus: Float64Array, count: number, steps: number, out: Float64Array) => void;
+
+const fans = new WeakMap<Atmosphere, RadianceFan>();
+
+/** The fan of an atmosphere `createAtmosphere` made. Not on the package's entry: an atmosphere made otherwise has none, and is sampled ray by ray. */
+export function radianceFanOf(atmosphere: Atmosphere): RadianceFan | undefined {
+  return fans.get(atmosphere);
+}
+
+/** The most steps a fan keeps along its line of sight; more are marched ray by ray. */
+const FAN_MAX_STEPS = 4096;
+
 const RG = ATMOSPHERE.planetRadiusMeters;
 const RT = ATMOSPHERE.planetRadiusMeters + ATMOSPHERE.thicknessMeters;
 /** Distance from the horizon at sea level to the top of the air. */
@@ -449,7 +466,138 @@ export function createAtmosphere(parameters: AtmosphereParameters, now: () => nu
     return out;
   }
 
-  const sample: Rgb = [0, 0, 0];
+  // ─── One line of sight, many directions to the Sun ──────────────────
+  // Everything march() works out from the line of sight alone (the steps,
+  // their densities and depths, where each step's scattering is centred, the
+  // share that reaches the start, the ground's share) is the same for each
+  // direction to the Sun on a dome's row or an irradiance ring: it is worked
+  // out once, and only the lookups that depend on the Sun are made for each.
+  // The operations and their order are march()'s, so are the results, bit for bit.
+  let fanCapacity = 0;
+  let fanMiddle = new Float64Array(0);
+  let fanMiddleRadius = new Float64Array(0);
+  let fanScatteredMie = new Float64Array(0);
+  let fanScatteredRayleigh = new Float64Array(0);
+  let fanScattered = new Float64Array(0);
+  let fanReaching = new Float64Array(0);
+  const fanGround: Rgb = [0, 0, 0];
+  const fanSample: Rgb = [0, 0, 0];
+  function radianceFan(altitudeMeters: number, mu0: number, muSun0: number, nus: Float64Array, count: number, steps0: number, out: Float64Array): void {
+    const r0 = RG + Math.max(0, altitudeMeters);
+    const muLine = Math.min(1, Math.max(-1, mu0));
+    const muSunLine = Math.min(1, Math.max(-1, muSun0));
+    const steps = Math.max(1, Math.round(steps0));
+    if (!(steps <= FAN_MAX_STEPS)) {
+      for (let k = 0; k < count; k++) {
+        march(r0, muLine, muSunLine, Math.min(1, Math.max(-1, nus[k])), steps, fanSample, false, null);
+        out[k * 3] = fanSample[0]; out[k * 3 + 1] = fanSample[1]; out[k * 3 + 2] = fanSample[2];
+      }
+      return;
+    }
+    if (steps > fanCapacity) {
+      fanCapacity = steps;
+      fanMiddle = new Float64Array(steps);
+      fanMiddleRadius = new Float64Array(steps);
+      fanScatteredMie = new Float64Array(steps);
+      fanScatteredRayleigh = new Float64Array(steps * 3);
+      fanScattered = new Float64Array(steps * 3);
+      fanReaching = new Float64Array(steps * 3);
+    }
+    out.fill(0, 0, count * 3);
+    let r = r0;
+    let mu = muLine;
+    let enter = 0;
+    let entered = false;
+    if (r > RT) {
+      const discriminant = r * r * (mu * mu - 1) + RT * RT;
+      if (mu >= 0 || discriminant < 0) return;
+      enter = -r * mu - Math.sqrt(discriminant);
+      entered = true;
+      mu = (r * mu + enter) / RT;
+      r = RT;
+    }
+    r = Math.max(r, RG);
+    const groundDiscriminant = r * r * (mu * mu - 1) + RG * RG;
+    const hitsGround = mu < 0 && groundDiscriminant >= 0;
+    const length = hitsGround
+      ? Math.max(0, -r * mu - Math.sqrt(groundDiscriminant))
+      : Math.max(0, -r * mu + Math.sqrt(Math.max(0, r * r * (mu * mu - 1) + RT * RT)));
+    tau[0] = 0; tau[1] = 0; tau[2] = 0;
+    const climbing = mu >= 0;
+    let h = r - RG;
+    let densityRayleigh = Math.exp(-h * invRayleighHeight);
+    let densityMie = Math.exp(-h * invMieHeight);
+    let densityOzone = ozoneDensity(h);
+    let from = 0;
+    let taken = 0;
+    for (let i = 1; i <= steps && length > 0; i++) {
+      const fraction = i / steps;
+      const s = length * (climbing ? fraction * fraction : fraction);
+      const step = s - from;
+      const radius = Math.max(RG, Math.sqrt(r * r + s * s + 2 * r * mu * s));
+      h = radius - RG;
+      const nextRayleigh = Math.exp(-h * invRayleighHeight);
+      const nextMie = Math.exp(-h * invMieHeight);
+      const nextOzone = ozoneDensity(h);
+      const pathRayleigh = logMean(densityRayleigh, nextRayleigh, step);
+      const pathMie = logMean(densityMie, nextMie, step);
+      const pathOzone = 0.5 * (densityOzone + nextOzone) * step;
+      const before = rayleigh[1] * densityRayleigh + mieScattering * densityMie;
+      const after = rayleigh[1] * nextRayleigh + mieScattering * nextMie;
+      const slope = before > 0 && after > 0 ? Math.log(before / after) : 0;
+      const centre = Math.abs(slope) < 1e-3 ? 0.5 : 1 / slope - 1 / (Math.exp(slope) - 1);
+      densityRayleigh = nextRayleigh; densityMie = nextMie; densityOzone = nextOzone;
+      const middle = from + centre * step;
+      from = s;
+      const j = taken++;
+      fanMiddle[j] = middle;
+      fanMiddleRadius[j] = Math.max(RG, Math.sqrt(r * r + middle * middle + 2 * r * mu * middle));
+      const scatteredMie = mieScattering * pathMie;
+      fanScatteredMie[j] = scatteredMie;
+      for (let c = 0; c < 3; c++) {
+        const scatteredRayleigh = rayleigh[c] * pathRayleigh;
+        const depth = scatteredRayleigh + mieExtinction * pathMie + ozone[c] * pathOzone;
+        fanReaching[j * 3 + c] = Math.exp(-tau[c]) * (depth > 1e-9 ? (1 - Math.exp(-depth)) / depth : 1);
+        fanScatteredRayleigh[j * 3 + c] = scatteredRayleigh;
+        fanScattered[j * 3 + c] = scatteredRayleigh + scatteredMie;
+        tau[c] += depth;
+      }
+    }
+    const ground0 = Math.exp(-tau[0]) * (albedo / Math.PI);
+    const ground1 = Math.exp(-tau[1]) * (albedo / Math.PI);
+    const ground2 = Math.exp(-tau[2]) * (albedo / Math.PI);
+    for (let k = 0; k < count; k++) {
+      const nu = Math.min(1, Math.max(-1, nus[k]));
+      const muSun = entered ? (r0 * muSunLine + enter * nu) / RT : muSunLine;
+      const phaseRayleigh = rayleighPhase(nu);
+      const phaseMie = miePhase(nu);
+      let o0 = 0, o1 = 0, o2 = 0;
+      for (let j = 0; j < taken; j++) {
+        const middleRadius = fanMiddleRadius[j];
+        const middleMuSun = Math.min(1, Math.max(-1, (r * muSun + fanMiddle[j] * nu) / middleRadius));
+        sunTransmittanceAt(middleRadius, middleMuSun, sunT);
+        multipleScatteringAt(middleRadius, middleMuSun, psi);
+        const scatteredMie = fanScatteredMie[j];
+        const b = j * 3;
+        o0 += ((fanScatteredRayleigh[b] * phaseRayleigh + scatteredMie * phaseMie) * sunT[0] + fanScattered[b] * psi[0]) * fanReaching[b];
+        o1 += ((fanScatteredRayleigh[b + 1] * phaseRayleigh + scatteredMie * phaseMie) * sunT[1] + fanScattered[b + 1] * psi[1]) * fanReaching[b + 1];
+        o2 += ((fanScatteredRayleigh[b + 2] * phaseRayleigh + scatteredMie * phaseMie) * sunT[2] + fanScattered[b + 2] * psi[2]) * fanReaching[b + 2];
+      }
+      if (hitsGround) {
+        const groundMuSun = Math.min(1, Math.max(-1, (r * muSun + length * nu) / RG));
+        sunTransmittanceAt(RG, groundMuSun, sunT);
+        groundSkyIrradiance(groundMuSun, fanGround);
+        const direct = Math.max(0, groundMuSun);
+        o0 += ground0 * (sunT[0] * direct + fanGround[0]);
+        o1 += ground1 * (sunT[1] * direct + fanGround[1]);
+        o2 += ground2 * (sunT[2] * direct + fanGround[2]);
+      }
+      out[k * 3] = o0; out[k * 3 + 1] = o1; out[k * 3 + 2] = o2;
+    }
+  }
+
+  const ringNus = new Float64Array(TABLES.irradianceAzimuthSamples);
+  const ring = new Float64Array(TABLES.irradianceAzimuthSamples * 3);
   function skyIrradiance(altitudeMeters: number, muSun: number, out: Rgb): Rgb {
     out[0] = 0; out[1] = 0; out[2] = 0;
     const zeniths = TABLES.irradianceZenithSamples;
@@ -466,8 +614,11 @@ export function createAtmosphere(parameters: AtmosphereParameters, now: () => nu
       const weight = mu * sinView * step * (2 * Math.PI / azimuths);
       for (let j = 0; j < azimuths; j++) {
         const phi = ((j + 0.5) / azimuths) * Math.PI;
-        radianceAt(altitudeMeters, mu, muSun, mu * muSun + sinView * sinSun * Math.cos(phi), TABLES.irradianceSteps, sample);
-        out[0] += sample[0] * weight; out[1] += sample[1] * weight; out[2] += sample[2] * weight;
+        ringNus[j] = mu * muSun + sinView * sinSun * Math.cos(phi);
+      }
+      radianceFan(altitudeMeters, mu, muSun, ringNus, azimuths, TABLES.irradianceSteps, ring);
+      for (let j = 0; j < azimuths; j++) {
+        out[0] += ring[j * 3] * weight; out[1] += ring[j * 3 + 1] * weight; out[2] += ring[j * 3 + 2] * weight;
       }
     }
     return out;
@@ -479,7 +630,7 @@ export function createAtmosphere(parameters: AtmosphereParameters, now: () => nu
   }
   groundIrradianceReady = true;
 
-  return {
+  const atmosphere: Atmosphere = {
     parameters: { aerosolOpticalDepth: aerosol, groundAlbedo: albedo },
     build: {
       buildMs: now() - started,
@@ -505,4 +656,6 @@ export function createAtmosphere(parameters: AtmosphereParameters, now: () => nu
     skyIrradiance,
     groundSkyIrradiance,
   };
+  fans.set(atmosphere, radianceFan);
+  return atmosphere;
 }

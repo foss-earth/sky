@@ -1,5 +1,5 @@
 import { DEG_TO_RAD, RAD_TO_DEG } from "./units.js";
-import { ATMOSPHERE, type Atmosphere, type Rgb } from "./atmosphere.js";
+import { ATMOSPHERE, radianceFanOf, type Atmosphere, type Rgb } from "./atmosphere.js";
 import { MOONLIGHT_TINT, moonIlluminanceLux, moonViewFrom, type LunarEphemeris, type MoonView } from "./lunarPosition.js";
 import { refractionFormulaDeg, SPA_REFRACTION_CUTOFF_DEG, sunDirectionFrom, type SolarEphemeris } from "./solarPosition.js";
 
@@ -559,6 +559,21 @@ export interface SkyDomeFillOptions {
   moonlitSky: boolean;
 }
 
+// One row of the dome at a time: where its columns look, and what they see.
+let rowCapacity = 0;
+let rowCos = new Float64Array(0);
+let rowSin = new Float64Array(0);
+let rowNus = new Float64Array(0);
+let rowSamples = new Float64Array(0);
+function reserveRow(count: number): void {
+  if (count <= rowCapacity) return;
+  rowCapacity = count;
+  rowCos = new Float64Array(count);
+  rowSin = new Float64Array(count);
+  rowNus = new Float64Array(count);
+  rowSamples = new Float64Array(count * 3);
+}
+
 /**
  * Samples the sky for a dome: where each vertex looks, and the luminance
  * there. Rows crowd towards the horizon as seen from the observer's height,
@@ -600,31 +615,55 @@ export function fillSkyDome(dome: SkyDomeGeometry, atmosphere: Atmosphere, illum
 
   const sample: Rgb = [0, 0, 0];
   const steps = dome.layout.integrationSteps;
+  // Each row is one line of sight: the atmosphere's fan marches it once for all its columns.
+  const fan = radianceFanOf(atmosphere);
+  const sampled = (mu: number, muLight: number, count: number) => {
+    if (fan) fan(altitude, mu, muLight, rowNus, count, steps, rowSamples);
+    else {
+      for (let k = 0; k < count; k++) {
+        atmosphere.radiance(altitude, mu, muLight, rowNus[k], steps, sample);
+        rowSamples[k * 3] = sample[0]; rowSamples[k * 3 + 1] = sample[1]; rowSamples[k * 3 + 2] = sample[2];
+      }
+    }
+  };
+  const columnCount = half >= 0 ? Math.floor(half) + 1 : 0;
+  reserveRow(Math.max(columnCount, columns));
+  for (let column = 0; column <= half; column++) {
+    // Columns crowd towards the Sun's bearing, where haze glows.
+    const t = column / half;
+    const phi = Math.PI * t * t;
+    rowCos[column] = Math.cos(phi);
+    rowSin[column] = Math.sin(phi);
+  }
   let evaluations = 0;
   for (let row = 0; row < rows; row++) {
     const theta = angles[row];
     const mu = Math.cos(theta);
     const sinView = Math.sin(theta);
     const aboveHorizon = theta <= horizon;
+    for (let column = 0; column <= half; column++) rowNus[column] = mu * muSun + sinView * sinSun * rowCos[column];
+    sampled(mu, muSun, columnCount);
+    evaluations += columnCount;
+    const extra = aboveHorizon ? night : night * albedo;
     for (let column = 0; column <= half; column++) {
-      // Columns crowd towards the Sun's bearing, where haze glows.
-      const t = column / half;
-      const phi = Math.PI * t * t;
-      const cosPhi = Math.cos(phi);
-      atmosphere.radiance(altitude, mu, muSun, mu * muSun + sinView * sinSun * cosPhi, steps, sample);
-      evaluations++;
-      const extra = aboveHorizon ? night : night * albedo;
-      const x = sinView * cosPhi;
-      const z = sinView * Math.sin(phi);
-      for (const mirrored of column === 0 || column === half ? [column] : [column, columns - column]) {
-        const index = (row * columns + mirrored) * 3;
-        dome.directions[index] = x;
-        dome.directions[index + 1] = mu;
-        dome.directions[index + 2] = mirrored === column ? z : -z;
-        dome.luminances[index] = sample[0] * scale + extra;
-        dome.luminances[index + 1] = sample[1] * scale + extra;
-        dome.luminances[index + 2] = sample[2] * scale + extra;
-      }
+      const x = sinView * rowCos[column];
+      const z = sinView * rowSin[column];
+      const s0 = rowSamples[column * 3], s1 = rowSamples[column * 3 + 1], s2 = rowSamples[column * 3 + 2];
+      let index = (row * columns + column) * 3;
+      dome.directions[index] = x;
+      dome.directions[index + 1] = mu;
+      dome.directions[index + 2] = z;
+      dome.luminances[index] = s0 * scale + extra;
+      dome.luminances[index + 1] = s1 * scale + extra;
+      dome.luminances[index + 2] = s2 * scale + extra;
+      if (column === 0 || column === half) continue;
+      index = (row * columns + columns - column) * 3;
+      dome.directions[index] = x;
+      dome.directions[index + 1] = mu;
+      dome.directions[index + 2] = -z;
+      dome.luminances[index] = s0 * scale + extra;
+      dome.luminances[index + 1] = s1 * scale + extra;
+      dome.luminances[index + 2] = s2 * scale + extra;
     }
   }
 
@@ -635,7 +674,38 @@ export function fillSkyDome(dome: SkyDomeGeometry, atmosphere: Atmosphere, illum
   let moonEvaluations = 0;
   const moonAxes = moon ? toDomeAxes(illumination, moon.direction) : null;
   const muMoon = moon ? Math.sin(moon.elevationDeg * DEG_TO_RAD) : 0;
-  if (moonlit && moon && moonAxes) {
+  // A dome of whole rows and columns is lit a row at a time; any other, a vertex at a time.
+  if (moonlit && moon && moonAxes && Number.isInteger(rows) && Number.isInteger(columns)) {
+    for (let row = 0; row < rows; row++) {
+      // A row's vertices share its line of sight's height (the same float32 mu);
+      // any that does not is sampled on its own.
+      const base = row * columns;
+      const dy = dome.directions[base * 3 + 1];
+      let count = 0;
+      for (let column = 0; column < columns; column++) {
+        const index = (base + column) * 3;
+        if (dome.directions[index + 1] === dy) rowNus[count++] = dome.directions[index] * moonAxes[0] + dy * moonAxes[1] + dome.directions[index + 2] * moonAxes[2];
+      }
+      sampled(dy, muMoon, count);
+      let k = 0;
+      for (let column = 0; column < columns; column++) {
+        const index = (base + column) * 3;
+        const dx = dome.directions[index], vy = dome.directions[index + 1], dz = dome.directions[index + 2];
+        let s0, s1, s2;
+        if (vy === dy) {
+          s0 = rowSamples[k * 3]; s1 = rowSamples[k * 3 + 1]; s2 = rowSamples[k * 3 + 2];
+          k++;
+        } else {
+          atmosphere.radiance(altitude, vy, muMoon, dx * moonAxes[0] + vy * moonAxes[1] + dz * moonAxes[2], steps, sample);
+          s0 = sample[0]; s1 = sample[1]; s2 = sample[2];
+        }
+        moonEvaluations++;
+        dome.luminances[index] += s0 * moon.extraterrestrial[0];
+        dome.luminances[index + 1] += s1 * moon.extraterrestrial[1];
+        dome.luminances[index + 2] += s2 * moon.extraterrestrial[2];
+      }
+    }
+  } else if (moonlit && moon && moonAxes) {
     for (let vertex = 0; vertex < rows * columns; vertex++) {
       const index = vertex * 3;
       const dx = dome.directions[index], dy = dome.directions[index + 1], dz = dome.directions[index + 2];

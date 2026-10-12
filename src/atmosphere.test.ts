@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ATMOSPHERE, createAtmosphere, miePhase, rayleighPhase, type Rgb } from "./atmosphere.js";
+import { ATMOSPHERE, createAtmosphere, miePhase, radianceFanOf, rayleighPhase, type Rgb } from "./atmosphere.js";
 
 const CLEAR = { aerosolOpticalDepth: 0.1, groundAlbedo: 0.2 };
 const Y = (c: Readonly<Rgb>): number => 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
@@ -190,6 +190,34 @@ describe("atmosphere", () => {
     const near = sinDeg(45);
     const nu = near * muSun + cosDeg(45) * cosDeg(40);
     expect(Y(hazy.radiance(0, near, muSun, nu, 16, other))).toBeGreaterThan(Y(atmosphere.radiance(0, near, muSun, nu, 16, out)));
+  });
+
+  it("marches one line of sight for many directions to the Sun, bit for bit as it marches each ray", () => {
+    const fan = radianceFanOf(atmosphere)!;
+    expect(radianceFanOf({ ...atmosphere })).toBeUndefined();
+    const count = 40;
+    const nus = new Float64Array(count), fanned = new Float64Array(count * 3 + 3), ray: Rgb = [0, 0, 0];
+    // Directions all round the line of sight, and a little beyond the cosines' range at either end.
+    for (let k = 0; k < count; k++) nus[k] = 1.01 * Math.cos((k / (count - 1)) * Math.PI);
+    const check = (altitude: number, mu: number, muSun: number, steps: number, n: number) => {
+      fanned.fill(-1);
+      fan(altitude, mu, muSun, nus, n, steps, fanned);
+      for (let k = 0; k < n; k++) {
+        atmosphere.radiance(altitude, mu, muSun, nus[k], steps, ray);
+        for (let c = 0; c < 3; c++) expect(Object.is(fanned[k * 3 + c], ray[c]), `${altitude} m, mu ${mu}, muSun ${muSun}, ${steps} steps, nu ${nus[k]}`).toBe(true);
+      }
+      expect(fanned[n * 3]).toBe(-1);
+    };
+    // From the ground, a height and space; up, along and below the horizon; Suns up, down and out of range;
+    // the steps of the tables, fewer and more (the fan's buffers grow), half steps, and more than a fan keeps.
+    for (const steps of [16, 3, 17, 40, 2.5]) {
+      for (const altitude of [0, 600, 12_000, 400_000]) {
+        for (const mu of [1, 0.3, 0.01, 0, -0.05, -0.4, -1, 1.5]) {
+          for (const muSun of [0.9, 0.1, -0.1, -0.3, -1.2]) check(altitude, mu, muSun, steps, count);
+        }
+      }
+    }
+    check(400_000, -0.4, 0.5, 5000, 2);
   });
 
   it("reports what its tables cost", () => {
