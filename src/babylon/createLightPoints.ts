@@ -139,7 +139,8 @@ export function createLightPoints(scene: Scene, options: LightPointsOptions): Li
   function update(): void {
     if (disposed) return;
     const camera = scene.activeCamera;
-    const height = scene.getEngine().getRenderHeight();
+    // The camera's viewport: the world's part of a canvas other surfaces can share.
+    const height = camera ? Math.floor(scene.getEngine().getRenderHeight() * camera.viewport.height) : 0;
     if (!camera || points.length === 0 || height <= 0) {
       mesh.setEnabled(false);
       return;

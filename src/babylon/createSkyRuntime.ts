@@ -781,7 +781,8 @@ export function createSkyRuntime(options: SkyRuntimeOptions): SkyRuntime {
   /** The angle a pixel spans at the view's centre, radians. */
   function pixelAngle(): number {
     const camera = scene.activeCamera;
-    const height = scene.getEngine().getRenderHeight();
+    // In the camera's viewport, which can be part of the canvas.
+    const height = camera ? Math.floor(scene.getEngine().getRenderHeight() * camera.viewport.height) : 0;
     return camera && height > 0 ? (2 * Math.tan(camera.fov / 2)) / height : 0;
   }
 

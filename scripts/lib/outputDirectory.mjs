@@ -7,7 +7,7 @@ const root = fileURLToPath(new URL("../../", import.meta.url));
 /**
  * Creates and returns a new folder for one run's output, under the gitignored
  * `build/` tree and named for the local time the run started:
- * `newOutputDirectory("validation", "panorama-campus")` →
+ * `newOutputDirectory("validation", "sphere-campus")` →
  * `build/validation/panorama-campus/2026-09-26_174512/`. Two runs in the same
  * second get -2, -3…: every run is kept, none overwritten.
  */
