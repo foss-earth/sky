@@ -25,6 +25,32 @@ Register `SKY_PARAMETERS` in your `SettingsRegistry` and apply the section title
 
 The engine's map download concurrency and retry settings stay with the host. Register them yourself when night maps are enabled.
 
+### Optional worker atmosphere numeric port
+
+`createAtmosphere(parameters, now, ports?)` keeps the JavaScript table builder
+and reference as its default. A worker may preload a compatible numeric module
+and supply `{ execution: "worker", createKernel, onStatus }`. The kernel receives
+copied Float32 tables and implements ray radiance, the shared sightline fan and
+hemisphere sky irradiance. Each operation's first input is compared exactly
+against the retained reference; an error or difference permanently uses the
+reference for that atmosphere. `atmosphereNumericStatusOf(atmosphere)` reports
+the requested/actual backend, per-operation parity, fallback and cleanup state.
+Call the optional `atmosphere.dispose()` before replacing a native atmosphere.
+
+The optional `ports.createTables(parameters)` builds transmittance, multiple
+scattering and ground irradiance in the worker as well. The first complete table
+set is compared exactly with JavaScript and the reference tables are used for
+that atmosphere. Reuse one ports object per worker: subsequent builds may skip
+the JavaScript precompute after that comparison. Table failure or mismatch
+permanently disables native work for that ports object. Status includes the
+actual table backend and table parity independently of query parity.
+
+The source port rejects a browser page and adds no engine dependency or app
+wiring. The host owns bounded asynchronous startup and the worker lifecycle.
+The corresponding `native/packages/native-sky` Rust/WASM implementation is an
+unvalidated partial conversion: astronomy, dome filling and
+renderer integration remain JavaScript. It has no qualified speed/power claim.
+
 ### Observer and clock
 
 - `observerAt(x, y, z, ecefToGeodetic)` needs the host's ECEF-to-geodetic conversion.

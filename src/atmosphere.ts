@@ -1,3 +1,5 @@
+import { attachAtmosphereNumericKernel, prepareAtmosphereNumericTables, finishAtmosphereNumericTables, type AtmosphereNumericPorts } from "./atmosphereNumericKernel.js";
+
 /**
  * A clear atmosphere of air molecules, haze and ozone around a spherical
  * Earth, and the light of the Sun scattered through it: the one physical
@@ -119,6 +121,8 @@ export interface Atmosphere {
   skyIrradiance(altitudeMeters: number, muSun: number, out: Rgb): Rgb;
   /** The same on level ground at sea level, from a table: cheap enough for every direction that meets the ground. */
   groundSkyIrradiance(muSun: number, out: Rgb): Rgb;
+  /** Releases an optional worker numeric kernel; absent on the reference-only path. */
+  dispose?(): void;
 }
 
 /**
@@ -192,10 +196,12 @@ export function miePhase(nu: number, g: number = ATMOSPHERE.mieAsymmetry): numbe
   return (3 / (8 * Math.PI)) * ((1 - g2) * (1 + nu * nu)) / ((2 + g2) * Math.pow(1 + g2 - 2 * g * nu, 1.5));
 }
 
-export function createAtmosphere(parameters: AtmosphereParameters, now: () => number = () => 0): Atmosphere {
+export function createAtmosphere(parameters: AtmosphereParameters, now: () => number = () => 0, numericPorts?: AtmosphereNumericPorts): Atmosphere {
   const started = now();
   const aerosol = Math.max(0, parameters.aerosolOpticalDepth);
   const albedo = Math.min(1, Math.max(0, parameters.groundAlbedo));
+  const nativeTableAttempt = numericPorts ? prepareAtmosphereNumericTables({ aerosolOpticalDepth: aerosol, groundAlbedo: albedo }, numericPorts) : null;
+  const inheritedTables = nativeTableAttempt?.admitted ? nativeTableAttempt.candidate : null;
   const mieExtinction = aerosol / ATMOSPHERE.mieScaleHeightMeters;
   const mieScattering = mieExtinction * ATMOSPHERE.mieSingleScatteringAlbedo;
   const rayleigh = ATMOSPHERE.rayleighScattering;
@@ -211,8 +217,8 @@ export function createAtmosphere(parameters: AtmosphereParameters, now: () => nu
   // itself falls by orders of magnitude between neighbours: towards a low Sun.
   const tw = TABLES.transmittanceWidth;
   const th = TABLES.transmittanceHeight;
-  const transmittance = new Float32Array(tw * th * 3);
-  for (let v = 0; v < th; v++) {
+  const transmittance = inheritedTables?.transmittance.slice() ?? new Float32Array(tw * th * 3);
+  if (!inheritedTables) for (let v = 0; v < th; v++) {
     const rho = HORIZON_TO_TOP * (v / (th - 1));
     const r = Math.sqrt(rho * rho + RG * RG);
     const dMin = RT - r;
@@ -293,8 +299,8 @@ export function createAtmosphere(parameters: AtmosphereParameters, now: () => nu
   const msHeights = TABLES.multipleScatteringHeights;
   const msAxis = sunAxis(TABLES.twilightMinCosine, TABLES.multipleScatteringTwilightSuns, TABLES.multipleScatteringDaySuns);
   const msSuns = msAxis.samples;
-  const multipleScattering = new Float32Array(msSuns * msHeights * 3);
-  let multipleScatteringReady = false;
+  const multipleScattering = inheritedTables?.multipleScattering.slice() ?? new Float32Array(msSuns * msHeights * 3);
+  let multipleScatteringReady = !!inheritedTables;
   const psi: Rgb = [0, 0, 0];
   function multipleScatteringAt(r: number, muSun: number, out: Rgb): void {
     if (!multipleScatteringReady || muSun <= TABLES.twilightMinCosine) {
@@ -320,8 +326,8 @@ export function createAtmosphere(parameters: AtmosphereParameters, now: () => nu
   // ─── One ray through the air ────────────────────────────────────────
   // The sky's light on level ground, from a table of logarithms (TABLES.logFloor).
   const groundAxis = sunAxis(TABLES.groundIrradianceMinCosine, TABLES.groundIrradianceTwilightSuns, TABLES.groundIrradianceDaySuns);
-  const groundIrradiance = new Float32Array(groundAxis.samples * 3);
-  let groundIrradianceReady = false;
+  const groundIrradiance = inheritedTables?.groundIrradiance.slice() ?? new Float32Array(groundAxis.samples * 3);
+  let groundIrradianceReady = !!inheritedTables;
   function groundSkyIrradiance(muSun: number, out: Rgb): Rgb {
     if (!groundIrradianceReady) {
       out[0] = 0; out[1] = 0; out[2] = 0;
@@ -432,7 +438,7 @@ export function createAtmosphere(parameters: AtmosphereParameters, now: () => nu
   const pending = new Float32Array(multipleScattering.length);
   const zeniths = TABLES.multipleScatteringZeniths;
   const azimuths = TABLES.multipleScatteringAzimuths;
-  for (let v = 0; v < msHeights; v++) {
+  if (!inheritedTables) for (let v = 0; v < msHeights; v++) {
     const r = RG + (RT - RG) * (v / (msHeights - 1));
     for (let u = 0; u < msSuns; u++) {
       const muSun = msAxis.cosine(u);
@@ -458,7 +464,7 @@ export function createAtmosphere(parameters: AtmosphereParameters, now: () => nu
       }
     }
   }
-  multipleScattering.set(pending);
+  if (!inheritedTables) multipleScattering.set(pending);
   multipleScatteringReady = true;
 
   function radianceAt(altitudeMeters: number, mu: number, muSun: number, nu: number, steps: number, out: Rgb): Rgb {
@@ -624,11 +630,14 @@ export function createAtmosphere(parameters: AtmosphereParameters, now: () => nu
     return out;
   }
 
-  for (let i = 0; i < groundAxis.samples; i++) {
+  if (!inheritedTables) for (let i = 0; i < groundAxis.samples; i++) {
     skyIrradiance(0, groundAxis.cosine(i), scratch);
     for (let c = 0; c < 3; c++) groundIrradiance[i * 3 + c] = Math.log(Math.max(TABLES.logFloor, scratch[c]));
   }
   groundIrradianceReady = true;
+  if (numericPorts) finishAtmosphereNumericTables(nativeTableAttempt, {
+    aerosolOpticalDepth: aerosol, groundAlbedo: albedo, transmittance, multipleScattering, groundIrradiance,
+  }, numericPorts);
 
   const atmosphere: Atmosphere = {
     parameters: { aerosolOpticalDepth: aerosol, groundAlbedo: albedo },
@@ -656,6 +665,14 @@ export function createAtmosphere(parameters: AtmosphereParameters, now: () => nu
     skyIrradiance,
     groundSkyIrradiance,
   };
+  if (numericPorts) {
+    const accelerated = attachAtmosphereNumericKernel(atmosphere, radianceFan, {
+      aerosolOpticalDepth: aerosol, groundAlbedo: albedo,
+      transmittance: transmittance.slice(), multipleScattering: multipleScattering.slice(), groundIrradiance: groundIrradiance.slice(),
+    }, numericPorts, inheritedTables ? "single" : "typescript");
+    fans.set(accelerated.atmosphere, accelerated.fan);
+    return accelerated.atmosphere;
+  }
   fans.set(atmosphere, radianceFan);
   return atmosphere;
 }

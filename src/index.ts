@@ -49,6 +49,13 @@ export {
   type Rgb,
 } from "./atmosphere.js";
 export {
+  atmosphereNumericStatusOf,
+  type AtmosphereNumericKernel,
+  type AtmosphereNumericPorts,
+  type AtmosphereNumericSnapshot,
+  type AtmosphereNumericStatus,
+} from "./atmosphereNumericKernel.js";
+export {
   MOON_MEAN_DISTANCE_KM,
   MOON_RADIUS_KM,
   MOONLIGHT_TINT,
