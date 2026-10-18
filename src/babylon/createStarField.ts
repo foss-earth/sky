@@ -1,6 +1,7 @@
 import { Color3, Constants, Material, Mesh, RawTexture, StandardMaterial, Texture, VertexBuffer, type Scene, type Vector3 } from "@babylonjs/core";
 import type { Atmosphere, Rgb } from "../atmosphere.js";
 import type { SkyObserver } from "../skyState.js";
+import type { StarAtmosphereResult } from "../starAtmosphere.js";
 import { starDirections, starIlluminanceLux, starTint, type Matrix3, type StarCatalogue } from "../stars.js";
 import { DISPLAY_GAMMA } from "../units.js";
 import { cleanupAll } from "./cleanup.js";
@@ -38,6 +39,8 @@ export interface StarFieldView {
   years: number;
   observer: SkyObserver;
   atmosphere: Atmosphere;
+  /** Samples for exactly this catalogue selection, matrix, observer and atmosphere; absent uses the synchronous reference. */
+  atmosphereBatch?: StarAtmosphereResult | null;
   /** The Sun's illuminance above the air at 1 AU, lux: the scale of magnitudes. */
   solarIlluminanceAt1AuLux: number;
   /** One over the white luminance: what a luminance is multiplied by to reach the scene. */
@@ -57,6 +60,8 @@ export interface StarFieldCost {
   updateMs: number;
   /** Whether the brightest star shows: the field is drawn only then. */
   visible: boolean;
+  /** Where the heading-independent atmosphere samples were evaluated. */
+  atmosphere?: "page" | "worker";
 }
 
 export interface StarField {
@@ -86,6 +91,9 @@ function starImage(): { data: Uint8Array; mean: number } {
   builtImage = { data, mean: sum / (texels * texels) };
   return builtImage;
 }
+
+/** Exact mean of the display-encoded Gaussian, shared with worker colour requests. */
+export function starImageMean(): number { return starImage().mean; }
 
 /**
  * Whether any star could show at an exposure and a star size: the brightest
@@ -147,6 +155,7 @@ export function createStarField(scene: Scene, options: { clock(): number }): Sta
   let tints = new Float64Array(0);
   let lux = new Float64Array(0);
   const transmittance: Rgb = [0, 0, 0];
+  let colorState: { inputs: number[]; atmosphere: Atmosphere; catalogue: StarCatalogue; directions: Float32Array; batch: StarAtmosphereResult | null; brightest: number } | null = null;
 
   function build(count: number): void {
     positions = new Float32Array(count * 12);
@@ -200,13 +209,20 @@ export function createStarField(scene: Scene, options: { clock(): number }): Sta
         lightOf = { catalogue, solarIlluminanceAt1AuLux, stars: count };
       }
       const m = view.toEcef;
-      let brightest = 0;
+      const batch = view.atmosphereBatch ?? null;
+      const batchEcef = batch?.ecef.length === directions.length ? batch.ecef : null;
+      const workerColors = batch?.colors?.rgb.length === directions.length && Object.is(batch.colors.toValue, toValue) ? batch.colors : null;
+      const workerTransmittance = batchEcef && batch?.transmittance.length === directions.length;
+      const colorInputs = [altitude, ...up, ...m, toValue, solarIlluminanceAt1AuLux];
+      const reuseColors = colorState && colorState.atmosphere === view.atmosphere && colorState.catalogue === catalogue
+        && colorState.directions === directions && colorState.batch === batch && colorInputs.every((value, index) => Object.is(value, colorState!.inputs[index]));
+      let brightest = reuseColors ? colorState!.brightest : workerColors ? workerColors.brightest : 0;
       // Babylon's Vector3.Cross, normalize and scaleInPlace, written out with their operations in their order.
       for (let star = 0; star < count; star++) {
         const sx = directions[star * 3], sy = directions[star * 3 + 1], sz = directions[star * 3 + 2];
-        const x = m[0] * sx + m[1] * sy + m[2] * sz;
-        const y = m[3] * sx + m[4] * sy + m[5] * sz;
-        const z = m[6] * sx + m[7] * sy + m[8] * sz;
+        const x = batchEcef ? batchEcef[star * 3] : m[0] * sx + m[1] * sy + m[2] * sz;
+        const y = batchEcef ? batchEcef[star * 3 + 1] : m[3] * sx + m[4] * sy + m[5] * sz;
+        const z = batchEcef ? batchEcef[star * 3 + 2] : m[6] * sx + m[7] * sy + m[8] * sz;
         const d = view.toScene(x, y, z);
         const dx = d.x, dy = d.y, dz = d.z;
         // Two directions across the line of sight, for the square's corners: e1 = d × (up, or right near the poles), normalized, and e2 = d × e1.
@@ -228,8 +244,22 @@ export function createStarField(scene: Scene, options: { clock(): number }): Sta
           positions[at + 1] = (dy + s * ay + t * by) * STAR_RADIUS_METERS;
           positions[at + 2] = (dz + s * az + t * bz) * STAR_RADIUS_METERS;
         }
+        // Scene rotation affects positions only. Keep the exact last colour values and avoid new atmosphere/gamma work.
+        if (reuseColors) continue;
+        if (workerColors) {
+          for (let corner = 0; corner < 4; corner++) {
+            const at = (star * 4 + corner) * 4;
+            colors[at] = workerColors.rgb[star * 3]; colors[at + 1] = workerColors.rgb[star * 3 + 1];
+            colors[at + 2] = workerColors.rgb[star * 3 + 2]; colors[at + 3] = 1;
+          }
+          continue;
+        }
         // Its light through the air: none below the horizon.
-        view.atmosphere.sunTransmittance(altitude, x * up[0] + y * up[1] + z * up[2], transmittance);
+        if (batch && workerTransmittance) {
+          transmittance[0] = batch.transmittance[star * 3];
+          transmittance[1] = batch.transmittance[star * 3 + 1];
+          transmittance[2] = batch.transmittance[star * 3 + 2];
+        } else view.atmosphere.sunTransmittance(altitude, x * up[0] + y * up[1] + z * up[2], transmittance);
         const light = lux[star] * toValue;
         const v0 = light * tints[star * 3] * transmittance[0];
         const v1 = light * tints[star * 3 + 1] * transmittance[1];
@@ -241,19 +271,21 @@ export function createStarField(scene: Scene, options: { clock(): number }): Sta
           colors[at] = c0; colors[at + 1] = c1; colors[at + 2] = c2; colors[at + 3] = 1;
         }
       }
+      if (!reuseColors) colorState = { inputs: colorInputs, atmosphere: view.atmosphere, catalogue, directions, batch, brightest };
       const visible = brightest >= VISIBLE_SHARE;
       if (visible) {
         mesh.updateVerticesData(VertexBuffer.PositionKind, positions, false, false);
-        mesh.updateVerticesData(VertexBuffer.ColorKind, colors, false, false);
+        if (!reuseColors) mesh.updateVerticesData(VertexBuffer.ColorKind, colors, false, false);
       }
       mesh.setEnabled(visible);
-      return { stars: count, updateMs: options.clock() - started, visible };
+      return { stars: count, updateMs: options.clock() - started, visible, atmosphere: workerColors || workerTransmittance ? "worker" : "page" };
     },
     dispose() {
       if (disposed) return;
       disposed = true;
       directions = null;
       lightOf = null;
+      colorState = null;
       tints = new Float64Array(0);
       lux = new Float64Array(0);
       positions = new Float32Array(0);

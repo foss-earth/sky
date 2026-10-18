@@ -1,4 +1,4 @@
-import type { Atmosphere, AtmosphereParameters, Rgb, RadianceFan } from "./atmosphere.js";
+import type { Atmosphere, AtmosphereParameters, Rgb, RadianceFan, RadianceFanRows } from "./atmosphere.js";
 
 /** ABI v1 tables; copies are handed to a kernel so the reference stays intact. */
 export interface AtmosphereNumericSnapshot {
@@ -8,28 +8,49 @@ export interface AtmosphereNumericSnapshot {
   multipleScattering: Float32Array;
   groundIrradiance: Float32Array;
 }
+/** Which build answers: the single-worker core, or the shared-memory core and its helper threads. */
+export type AtmosphereNumericBuild = "single" | "threaded";
+/** How a batch of fans ran: on the kernel's own thread, or with helper threads joining it. */
+export type AtmosphereFanRowsMode = "solo" | "parallel";
 export interface AtmosphereNumericKernel {
+  /** Absent: "single". */
+  readonly kind?: AtmosphereNumericBuild;
   radiance(altitudeMeters: number, mu: number, muSun: number, nu: number, steps: number, out: Rgb): Rgb;
   radianceFan: RadianceFan;
   skyIrradiance(altitudeMeters: number, muSun: number, out: Rgb): Rgb;
+  /**
+   * Optional: several rows' fans at once, as `RadianceFanRows`. Returns false,
+   * having written nothing, for a batch outside the kernel's bounds; otherwise
+   * how it ran.
+   */
+  radianceFanRows?(altitudeMeters: number, muSun: number, rows: number, mus: Float64Array, counts: Uint32Array, nus: Float64Array,
+    steps: number, out: Float64Array): AtmosphereFanRowsMode | false;
   dispose(): void;
 }
 type Operation = "radiance" | "fan" | "irradiance";
 export interface AtmosphereNumericStatus {
-  requested: "single";
-  actual: "typescript" | "single";
+  requested: AtmosphereNumericBuild;
+  /** "threaded" is the shared-memory core; `batches` says how often helper threads joined it. */
+  actual: "typescript" | AtmosphereNumericBuild;
   state: "checking" | "ready" | "fallback" | "disposed";
   fallbackReason: string | null;
   cleanupFailed: boolean;
-  tableBackend: "typescript" | "single";
+  tableBackend: "typescript" | AtmosphereNumericBuild;
   tableParity: "unchecked" | "same" | "different";
   /** Each operation needs its own first-input exact comparison. */
   parity: Record<Operation, "unchecked" | "same" | "different">;
   nativeCalls: number;
+  /**
+   * Batched fans, when the kernel has them: each way of running them is
+   * compared in full against the reference the first time it is used.
+   */
+  batches?: { parity: Record<AtmosphereFanRowsMode, "unchecked" | "same" | "different">; solo: number; parallel: number; rows: number; outOfBounds: number };
 }
 export interface AtmosphereNumericPorts {
   /** Only a worker host may opt in; the browser page is rejected as well. */
   execution: "worker";
+  /** The build `createKernel` returns; absent: "single". */
+  kind?: AtmosphereNumericBuild;
   /** Already-loaded synchronous worker module. The host bounds async startup. */
   createKernel(snapshot: AtmosphereNumericSnapshot): AtmosphereNumericKernel;
   /** Optional native precompute. Its first complete tables are checked against JS. */
@@ -71,11 +92,13 @@ export function atmosphereNumericStatusOf(atmosphere: Atmosphere): AtmosphereNum
 }
 /** Internal composition after the unmodified reference tables have been built. */
 export function attachAtmosphereNumericKernel(reference: Atmosphere, referenceFan: RadianceFan,
-  snapshot: AtmosphereNumericSnapshot, ports: AtmosphereNumericPorts, tableBackend: "typescript" | "single" = "typescript"): { atmosphere: Atmosphere; fan: RadianceFan } {
-  const status: AtmosphereNumericStatus = { requested: "single", actual: "typescript", state: "checking", fallbackReason: null,
-    cleanupFailed: false, tableBackend, tableParity: tableGates.get(ports)?.parity ?? "unchecked",
+  snapshot: AtmosphereNumericSnapshot, ports: AtmosphereNumericPorts, tableBackend: "typescript" | AtmosphereNumericBuild = "typescript"): { atmosphere: Atmosphere; fan: RadianceFan; fanRows?: RadianceFanRows } {
+  const build: AtmosphereNumericBuild = ports.kind ?? "single";
+  const status: AtmosphereNumericStatus = { requested: build, actual: "typescript", state: "checking", fallbackReason: null,
+    cleanupFailed: false, tableBackend: tableBackend === "typescript" ? "typescript" : build, tableParity: tableGates.get(ports)?.parity ?? "unchecked",
     parity: { radiance: "unchecked", fan: "unchecked", irradiance: "unchecked" }, nativeCalls: 0 };
-  const readStatus = (): AtmosphereNumericStatus => ({ ...status, parity: { ...status.parity } });
+  const readStatus = (): AtmosphereNumericStatus => ({ ...status, parity: { ...status.parity },
+    ...(status.batches ? { batches: { ...status.batches, parity: { ...status.batches.parity } } } : {}) });
   const report = (): void => { try { ports.onStatus?.(readStatus()); } catch { /* Snapshot remains available through atmosphereNumericStatusOf. */ } };
   let kernel: AtmosphereNumericKernel | null = null;
   function release(): void {
@@ -93,12 +116,12 @@ export function attachAtmosphereNumericKernel(reference: Atmosphere, referenceFa
     try {
       kernel = ports.createKernel(snapshot);
       if (!kernel || typeof kernel.radiance !== "function" || typeof kernel.radianceFan !== "function"
-        || typeof kernel.skyIrradiance !== "function" || typeof kernel.dispose !== "function") throw new Error("Invalid atmosphere numeric kernel");
+        || typeof kernel.skyIrradiance !== "function" || typeof kernel.dispose !== "function" || (kernel.kind ?? "single") !== build) throw new Error("Invalid atmosphere numeric kernel");
     } catch { fallback("kernel-startup-failed"); }
   }
   function admitted(operation: Operation): void {
     status.parity[operation] = "same";
-    status.actual = "single"; status.state = "ready"; report();
+    status.actual = build; status.state = "ready"; report();
   }
   function activeKernel(): AtmosphereNumericKernel | null {
     const gate = tableGates.get(ports);
@@ -145,6 +168,51 @@ export function attachAtmosphereNumericKernel(reference: Atmosphere, referenceFa
     }
     out.set(actual);
   };
+  // Rows in order, each the reference fan over its own part of the arrays.
+  const referenceRows: RadianceFanRows = (altitude, muSun, rows, mus, counts, nus, steps, out) => {
+    for (let row = 0, start = 0; row < rows; row++) {
+      const count = counts[row];
+      referenceFan(altitude, mus[row], muSun, nus.subarray(start, start + count), count, steps, out.subarray(start * 3, (start + count) * 3));
+      start += count;
+    }
+    return true;
+  };
+  const batches: AtmosphereNumericStatus["batches"] | null = typeof kernel?.radianceFanRows === "function"
+    ? status.batches = { parity: { solo: "unchecked", parallel: "unchecked" }, solo: 0, parallel: 0, rows: 0, outOfBounds: 0 } : null;
+  const fanRows: RadianceFanRows | undefined = batches ? (altitude, muSun, rows, mus, counts, nus, steps, out) => {
+    const native = activeKernel();
+    if (!native?.radianceFanRows) return referenceRows(altitude, muSun, rows, mus, counts, nus, steps, out);
+    let total = 0;
+    for (let row = 0; row < rows; row++) total += counts[row];
+    if (!Number.isSafeInteger(rows) || rows < 0 || mus.length < rows || counts.length < rows || nus.length < total || out.length < total * 3) {
+      fallback("fan-rows-input-outside-native-bound"); return referenceRows(altitude, muSun, rows, mus, counts, nus, steps, out);
+    }
+    if (rows === 0) return true;
+    const actual = new Float64Array(total * 3);
+    let mode: AtmosphereFanRowsMode | false;
+    try { status.nativeCalls++; mode = native.radianceFanRows(altitude, muSun, rows, mus, counts, nus, steps, actual); }
+    catch (error) {
+      const reason = error && typeof error === "object" && "reason" in error && typeof error.reason === "string" ? error.reason : null;
+      fallback(reason ? `fan-rows-failed: ${reason}` : "fan-rows-failed"); return referenceRows(altitude, muSun, rows, mus, counts, nus, steps, out);
+    }
+    if (mode === false) { batches.outOfBounds++; return false; }
+    if (mode !== "solo" && mode !== "parallel") { fallback("fan-rows-invalid-mode"); return referenceRows(altitude, muSun, rows, mus, counts, nus, steps, out); }
+    if (!actual.every(Number.isFinite)) { fallback("fan-rows-nonfinite"); return referenceRows(altitude, muSun, rows, mus, counts, nus, steps, out); }
+    batches[mode]++; batches.rows += rows;
+    if (batches.parity[mode] === "unchecked") {
+      const expected = new Float64Array(total * 3);
+      referenceRows(altitude, muSun, rows, mus, counts, nus, steps, expected);
+      out.set(expected);
+      if (!actual.every((value, index) => Object.is(value, expected[index]))) {
+        batches.parity[mode] = "different"; fallback(`fan-rows-${mode}-parity-mismatch`); return true;
+      }
+      batches.parity[mode] = "same";
+      status.actual = build; status.state = "ready"; report();
+      return true;
+    }
+    out.set(actual);
+    return true;
+  } : undefined;
   const atmosphere: Atmosphere = { ...reference,
     radiance: (altitude, mu, muSun, nu, steps, out) => rgb("radiance", out,
       () => reference.radiance(altitude, mu, muSun, nu, steps, out),
@@ -160,5 +228,5 @@ export function attachAtmosphereNumericKernel(reference: Atmosphere, referenceFa
     },
   };
   statuses.set(atmosphere, readStatus); report();
-  return { atmosphere, fan };
+  return fanRows ? { atmosphere, fan, fanRows } : { atmosphere, fan };
 }

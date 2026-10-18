@@ -1,4 +1,4 @@
-import { attachAtmosphereNumericKernel, prepareAtmosphereNumericTables, finishAtmosphereNumericTables, type AtmosphereNumericPorts } from "./atmosphereNumericKernel.js";
+import { attachAtmosphereNumericKernel, prepareAtmosphereNumericTables, finishAtmosphereNumericTables, type AtmosphereNumericPorts, type AtmosphereNumericSnapshot } from "./atmosphereNumericKernel.js";
 import { PRECOMPUTED_ATMOSPHERE_TABLES } from "./precomputedAtmosphereTables.js";
 
 /**
@@ -133,11 +133,26 @@ export interface Atmosphere {
  */
 export type RadianceFan = (altitudeMeters: number, mu: number, muSun: number, nus: Float64Array, count: number, steps: number, out: Float64Array) => void;
 
+/**
+ * Fans of several lines of sight with the Sun at one height: row `r` looks
+ * along `mus[r]` with `counts[r]` directions, whose nus and outputs follow the
+ * previous row's in `nus` and `out`. Each row is exactly `RadianceFan` over its
+ * part. False, with nothing written, when the batch is outside what the
+ * kernel holds: sample those rows a fan at a time.
+ */
+export type RadianceFanRows = (altitudeMeters: number, muSun: number, rows: number, mus: Float64Array, counts: Uint32Array, nus: Float64Array, steps: number, out: Float64Array) => boolean;
+
 const fans = new WeakMap<Atmosphere, RadianceFan>();
+const fanRows = new WeakMap<Atmosphere, RadianceFanRows>();
 
 /** The fan of an atmosphere `createAtmosphere` made. Not on the package's entry: an atmosphere made otherwise has none, and is sampled ray by ray. */
 export function radianceFanOf(atmosphere: Atmosphere): RadianceFan | undefined {
   return fans.get(atmosphere);
+}
+
+/** Batched fans, only where a worker's numeric kernel computes them together; otherwise undefined and rows are fanned one at a time. */
+export function radianceFanRowsOf(atmosphere: Atmosphere): RadianceFanRows | undefined {
+  return fanRows.get(atmosphere);
 }
 
 /** The most steps a fan keeps along its line of sight; more are marched ray by ray. */
@@ -225,11 +240,42 @@ export function miePhase(nu: number, g: number = ATMOSPHERE.mieAsymmetry): numbe
 }
 
 export function createAtmosphere(parameters: AtmosphereParameters, now: () => number = () => 0, numericPorts?: AtmosphereNumericPorts): Atmosphere {
+  return buildAtmosphere(parameters, now, numericPorts, null);
+}
+
+const TABLE_LENGTHS = { transmittance: 128 * 64 * 3, multipleScattering: 33 * 24 * 3, groundIrradiance: 48 * 3 } as const;
+const tableSets = new WeakMap<Atmosphere, AtmosphereNumericSnapshot>();
+
+/**
+ * Copies of the three tables an atmosphere was built with, and the parameters
+ * they are for: what another realm needs to answer the same queries without
+ * the precompute. Undefined for an atmosphere `createAtmosphere` did not make.
+ */
+export function atmosphereTables(atmosphere: Atmosphere): AtmosphereNumericSnapshot | undefined {
+  const tables = tableSets.get(atmosphere);
+  return tables && { ...tables, transmittance: tables.transmittance.slice(), multipleScattering: tables.multipleScattering.slice(), groundIrradiance: tables.groundIrradiance.slice() };
+}
+
+/**
+ * The reference atmosphere over tables another realm built, such as a sky
+ * worker's: every query is the same code over the same values, and the
+ * precompute is skipped. The tables are copied; the caller keeps its own.
+ */
+export function createAtmosphereFromTables(tables: AtmosphereNumericSnapshot, now: () => number = () => 0): Atmosphere {
+  const { aerosolOpticalDepth, groundAlbedo } = tables;
+  if (!Number.isFinite(aerosolOpticalDepth) || aerosolOpticalDepth < 0 || !Number.isFinite(groundAlbedo) || groundAlbedo < 0 || groundAlbedo > 1
+    || (Object.keys(TABLE_LENGTHS) as Array<keyof typeof TABLE_LENGTHS>).some(key => !(tables[key] instanceof Float32Array) || tables[key].length !== TABLE_LENGTHS[key])) {
+    throw new RangeError("Atmosphere tables must hold the three complete tables for clamped parameters.");
+  }
+  return buildAtmosphere({ aerosolOpticalDepth, groundAlbedo }, now, undefined, tables);
+}
+
+function buildAtmosphere(parameters: AtmosphereParameters, now: () => number, numericPorts: AtmosphereNumericPorts | undefined, supplied: AtmosphereNumericSnapshot | null): Atmosphere {
   const started = now();
   const aerosol = Math.max(0, parameters.aerosolOpticalDepth);
   const albedo = Math.min(1, Math.max(0, parameters.groundAlbedo));
-  const nativeTableAttempt = numericPorts ? prepareAtmosphereNumericTables({ aerosolOpticalDepth: aerosol, groundAlbedo: albedo }, numericPorts) : null;
-  const inheritedTables = nativeTableAttempt?.admitted ? nativeTableAttempt.candidate : null;
+  const nativeTableAttempt = numericPorts && !supplied ? prepareAtmosphereNumericTables({ aerosolOpticalDepth: aerosol, groundAlbedo: albedo }, numericPorts) : null;
+  const inheritedTables = supplied ?? (nativeTableAttempt?.admitted ? nativeTableAttempt.candidate : null);
   const mieExtinction = aerosol / ATMOSPHERE.mieScaleHeightMeters;
   const mieScattering = mieExtinction * ATMOSPHERE.mieSingleScatteringAlbedo;
   const rayleigh = ATMOSPHERE.rayleighScattering;
@@ -696,14 +742,18 @@ export function createAtmosphere(parameters: AtmosphereParameters, now: () => nu
     skyIrradiance,
     groundSkyIrradiance,
   };
+  const tables: AtmosphereNumericSnapshot = { aerosolOpticalDepth: aerosol, groundAlbedo: albedo, transmittance, multipleScattering, groundIrradiance };
   if (numericPorts) {
     const accelerated = attachAtmosphereNumericKernel(atmosphere, radianceFan, {
       aerosolOpticalDepth: aerosol, groundAlbedo: albedo,
       transmittance: transmittance.slice(), multipleScattering: multipleScattering.slice(), groundIrradiance: groundIrradiance.slice(),
     }, numericPorts, inheritedTables ? "single" : "typescript");
     fans.set(accelerated.atmosphere, accelerated.fan);
+    if (accelerated.fanRows) fanRows.set(accelerated.atmosphere, accelerated.fanRows);
+    tableSets.set(accelerated.atmosphere, tables);
     return accelerated.atmosphere;
   }
   fans.set(atmosphere, radianceFan);
+  tableSets.set(atmosphere, tables);
   return atmosphere;
 }

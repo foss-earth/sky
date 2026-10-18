@@ -40,7 +40,9 @@ export {
 } from "./solarDay.js";
 export {
   ATMOSPHERE,
+  atmosphereTables,
   createAtmosphere,
+  createAtmosphereFromTables,
   miePhase,
   rayleighPhase,
   type Atmosphere,
@@ -48,6 +50,35 @@ export {
   type AtmosphereParameters,
   type Rgb,
 } from "./atmosphere.js";
+export {
+  createSkyEvaluationState,
+  type SkyEvaluationDome,
+  type SkyEvaluationRequest,
+  type SkyEvaluationResult,
+  type SkyEvaluationState,
+  type SkyEvaluationStateOptions,
+} from "./skyEvaluation.js";
+export { createStarColorEvaluationState, evaluateStarAtmosphere, starColorToValue, type StarAtmosphereRequest, type StarAtmosphereResult,
+  type StarColorPresentation, type StarEvaluationRequest } from "./starAtmosphere.js";
+export {
+  createSkyWorkerEvaluator,
+  installSkyEvaluationWorker,
+  type SkyEvaluationBackend,
+  type SkyEvaluationKernel,
+  type SkyEvaluationWorkerHostOptions,
+  type SkyEvaluationWorkerPort,
+  type SkyEvaluationWorkerReply,
+  type SkyEvaluationWorkerRequest,
+  type SkyEvaluationWorkerScope,
+  type SkyEvaluator,
+  type SkyEvaluatorStatus,
+  type SkyHelperGroup,
+  type SkyHelperPort,
+  type SkyNumericCore,
+  type SkySharedThreadsStatus,
+  type SkyThreadedCore,
+  type SkyWorkerEvaluatorOptions,
+} from "./skyEvaluationWorker.js";
 export {
   atmosphereNumericStatusOf,
   type AtmosphereNumericKernel,

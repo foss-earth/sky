@@ -183,6 +183,23 @@ export const SKY_PARAMETERS: readonly ParameterSpec[] = [
     source: "src/engine/babylon/createStarField.ts",
   },
   {
+    id: "sky.stars.atmosphere",
+    label: "Star light evaluation",
+    description: "Where star directions, atmosphere and display colours are evaluated. Worker batches use the sky worker when one is active; otherwise the page reference runs. Billboard positions and exposure stay synchronous with rendering in both modes.",
+    unit: "none",
+    kind: "choice",
+    choices: [
+      { id: "page", label: "Page reference", description: "Sample each star on the page, preserving the original placement for comparison." },
+      { id: "worker", label: "Sky worker", description: "Batch the same samples with each sky evaluation in its existing worker; use the page until a matching batch is ready." },
+    ],
+    default: "worker",
+    defaultReason: "The page reference remains in use without a sky worker. A worker batches the same samples without delaying billboard positions.",
+    home: { tab: SKY_TAB, section: "night", level: "all" },
+    visibleWhen: { id: "sky.stars.mode", value: "catalogue" },
+    appliesLive: true,
+    source: "src/babylon/createStarField.ts",
+  },
+  {
     id: "sky.stars.limitingMagnitude",
     label: "Faintest star",
     description: "Stars up to this visual magnitude are drawn; the catalogue holds stars to about 8. Each magnitude fainter is 2.5 times less light and about three times as many stars.",

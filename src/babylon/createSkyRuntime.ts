@@ -15,7 +15,10 @@ import {
 import type { SkyModel } from "../settings.js";
 import type { SettingsRegistry } from "@foss-earth/ui/settings";
 import { isNumberRange } from "@foss-earth/ui/settings";
-import { ATMOSPHERE, createAtmosphere, type Atmosphere, type Rgb } from "../atmosphere.js";
+import { ATMOSPHERE, createAtmosphere, createAtmosphereFromTables, type Atmosphere, type Rgb } from "../atmosphere.js";
+import type { SkyEvaluationRequest, SkyEvaluationResult } from "../skyEvaluation.js";
+import type { StarAtmosphereResult, StarEvaluationRequest } from "../starAtmosphere.js";
+import type { SkyEvaluator, SkyEvaluatorStatus } from "../skyEvaluationWorker.js";
 import { lunarEphemeris, type LunarEphemeris } from "../lunarPosition.js";
 import { solarEphemeris, sunDirectionFrom, type SolarEphemeris } from "../solarPosition.js";
 import {
@@ -23,10 +26,10 @@ import {
   observerAt, parseUtcDate, PHOTOMETRY, starEv100, whiteLuminanceForEv100, type SkyDomeGeometry, type SkyIllumination, type SkyObserver,
 } from "../skyState.js";
 import { illuminancePerRadiance, luminancePerRadiance, radianceAboveFloor, type NightLightPhotometry } from "../nightLights.js";
-import { blackBodyTint, celestialToEcefMatrix, loadStarCatalogue, yearsFromJ2000, type StarCatalogue } from "../stars.js";
+import { blackBodyTint, celestialToEcefMatrix, loadStarCatalogue, starDirections, yearsFromJ2000, type StarCatalogue } from "../stars.js";
 import { createGroundLightProbe, type GroundLightProbe } from "./createGroundLightProbe.js";
 import { createNightLights, type NightLights, type NightLightsOptions, type NightLightsState } from "./createNightLights.js";
-import { createStarField, starPixelAngleChanged, starsCouldShow, type StarField, type StarFieldCost } from "./createStarField.js";
+import { createStarField, starImageMean, starPixelAngleChanged, starsCouldShow, type StarField, type StarFieldCost } from "./createStarField.js";
 import { cleanupAll } from "./cleanup.js";
 import { DISPLAY_GAMMA, RAD_TO_DEG } from "../units.js";
 import type { SkyTerrainPorts, NightTilePorts, TerrainLighting, TerrainNightLighting } from "./ports.js";
@@ -168,7 +171,17 @@ export interface SkyRuntime {
   setGroundLightReceiver(receiver: (() => Vector3 | null) | null): void;
   /** The night lights as they are now, tiles arriving included, or null while they are off or the imagery is not lit. */
   getNightLights(): SkyNightLights | null;
+  /** Where the model is evaluated: by the evaluator, or on the page, with why an evaluator was retired. */
+  getEvaluation(): SkyEvaluation;
   dispose(): void;
+}
+
+export interface SkyEvaluation {
+  placement: "page" | "worker";
+  /** Why the evaluator stopped being used; null while it is, or when there was none. */
+  retired: string | null;
+  /** The evaluator's own account, the last one when it was retired. */
+  evaluator: SkyEvaluatorStatus | null;
 }
 
 export interface SkyTimers {
@@ -205,6 +218,15 @@ export interface SkyRuntimeOptions {
   onDownloadBytes?: (bytes: number) => void;
   /** The night lights' tiles, replaceable for tests. */
   createNightLights?: (options: NightLightsOptions) => NightLights;
+  /**
+   * Evaluates the model away from the page, such as in a worker: the
+   * atmosphere's tables, the light and the dome arrive a frame or more after
+   * they are asked for. The runtime owns and disposes it; any failure retires
+   * it, and the page evaluates within the frame as it does without one.
+   */
+  evaluator?: SkyEvaluator | null;
+  /** Keeps the original on-page star sampling available when comparing worker placement. */
+  starAtmosphere?: "page" | "worker";
 }
 
 /** Settings whose change needs the model evaluated again, and those that only change how it is shown. */
@@ -212,6 +234,7 @@ const EVALUATED_IDS = [
   "sky.model", "sky.time.mode", "sky.time.date", "sky.time.utcHours", "sky.atmosphere.aerosolOpticalDepth",
   "sky.atmosphere.groundAlbedo", "sky.night.luminance", "sky.dome.zenithSamples", "sky.dome.azimuthSamples",
   "sky.dome.integrationSteps", "sky.moon.mode",
+  "sky.stars.atmosphere",
 ] as const;
 const PRESENTED_IDS = [
   "sky.exposure.mode", "sky.exposure.meterRange", "sky.exposure.ev100", "sky.exposure.adaptation", "sky.surface.lighting",
@@ -287,6 +310,14 @@ export function createSkyRuntime(options: SkyRuntimeOptions): SkyRuntime {
   let lastDensity = 0;
   let lastDipDeg = 0;
   const cost: SkyCost = { tablesMs: 0, tableBytes: 0, illuminationMs: 0, domeMs: 0, domeSamples: 0, moonSamples: 0, domeVertices: 0, computations: 0 };
+  // Away from the page: one request outstanding, the latest one waiting behind it.
+  let evaluator: SkyEvaluator | null = options.evaluator ?? null;
+  let evaluatorFailure: string | null = null;
+  let retiredStatus: SkyEvaluatorStatus | null = null;
+  let evaluating = false;
+  let waiting: SkyEvaluationRequest | null = null;
+  /** Counts turning off, so a result asked for before it is not shown after it. */
+  let generation = 0;
 
   let directLight: DirectionalLight | null = null;
   let skyLight: HemisphericLight | null = null;
@@ -307,6 +338,11 @@ export function createSkyRuntime(options: SkyRuntimeOptions): SkyRuntime {
   let starCost: StarFieldCost | null = null;
   let starPixelAngle = 0;
   let starKey = "";
+  let starWorld = "";
+  let starInputGeneration = 0;
+  let retainedStarGeneration: number | null = null;
+  let starInputs: { catalogue: StarCatalogue; generation: number; years: number; magnitude: number; directions: Float32Array; vmag: Float32Array; colourIndex: Float32Array } | null = null;
+  let starSamples: { generation: number; illumination: SkyIllumination; result: StarAtmosphereResult } | null = null;
 
   let probe: GroundLightProbe | null = null;
   /** The last reading of the light from the ground: its luminance, cd/m², and how long it took. */
@@ -458,6 +494,9 @@ export function createSkyRuntime(options: SkyRuntimeOptions): SkyRuntime {
     starCost = null;
     starPixelAngle = 0;
     starKey = "";
+    starWorld = "";
+    starSamples = null;
+    starInputs = null;
     previous?.dispose();
   }
 
@@ -564,6 +603,8 @@ export function createSkyRuntime(options: SkyRuntimeOptions): SkyRuntime {
     lastSunLocal = null;
     lastMoonLocal = null;
     cost.computations = 0;
+    generation += 1;
+    waiting = null;
     backgroundSet = null;
     backgroundBefore = null;
     let surfaceChanged = false;
@@ -786,6 +827,30 @@ export function createSkyRuntime(options: SkyRuntimeOptions): SkyRuntime {
     return camera && height > 0 ? (2 * Math.tan(camera.fov / 2)) / height : 0;
   }
 
+  /** Only the linear transform changes a direction; moving the scene origin does not. */
+  function starWorldTransform(): string {
+    const matrix = options.getWorldMatrix()?.m;
+    return matrix ? [matrix[0], matrix[1], matrix[2], matrix[4], matrix[5], matrix[6], matrix[8], matrix[9], matrix[10]].join(",") : "";
+  }
+
+  /** Retains the catalogue's J2000 directions; heading never enters a worker request. */
+  function starAtmosphereRequest(utcMs: number): StarEvaluationRequest | null {
+    if (!catalogue || settings.get("sky.stars.mode") === "off" || model() !== "dome" || (options.starAtmosphere ?? settings.get("sky.stars.atmosphere")) === "page") return null;
+    const years = Math.round(yearsFromJ2000(utcMs)), magnitude = number("sky.stars.limitingMagnitude");
+    if (!starInputs || starInputs.catalogue !== catalogue || starInputs.years !== years || starInputs.magnitude !== magnitude) {
+      const directions = starDirections(catalogue, years, magnitude), count = directions.length / 3;
+      starInputs = { catalogue, generation: ++starInputGeneration, years, magnitude, directions,
+        vmag: catalogue.vmag.slice(0, count), colourIndex: catalogue.colourIndex.slice(0, count) };
+    }
+    const meterRange = settings.get("sky.exposure.meterRange"), daylightAltitude = settings.get("sky.stars.daylightAltitude");
+    return { generation: starInputs.generation, toEcef: celestialToEcefMatrix(utcMs),
+      catalogue: retainedStarGeneration === starInputs.generation ? undefined : { directions: starInputs.directions, vmag: starInputs.vmag,
+        colourIndex: starInputs.colourIndex, solarIlluminanceAt1AuLux: PHOTOMETRY.solarIlluminanceLux },
+      presentation: { mode: settings.get("sky.exposure.mode") === "fixed" ? "fixed" : "metered", ev100: number("sky.exposure.ev100"), adaptation: number("sky.exposure.adaptation"),
+        meterRange: isNumberRange(meterRange) ? { ...meterRange } : null, daylightAltitude: isNumberRange(daylightAltitude) ? { ...daylightAltitude } : null,
+        sizePx: number("sky.stars.sizePx"), pixelAngle: pixelAngle(), imageMean: starImageMean() } };
+  }
+
   /** Draws the stars against their own white: `scale` is one over it. */
   function showStars(state: SkyIllumination, scale: number): void {
     if (model() !== "dome" || settings.get("sky.stars.mode") === "off") {
@@ -804,6 +869,7 @@ export function createSkyRuntime(options: SkyRuntimeOptions): SkyRuntime {
         (options.loadStars ?? loadStarCatalogue)().then(loaded => {
           if (disposed) return;
           catalogue = loaded;
+          if (evaluator && (options.starAtmosphere ?? settings.get("sky.stars.atmosphere")) !== "page") evaluate = true;
           present = true;
           options.requestRender();
         }, () => { if (!disposed) catalogueLoading = false; });
@@ -813,21 +879,29 @@ export function createSkyRuntime(options: SkyRuntimeOptions): SkyRuntime {
     catalogueState = "loaded";
     if (!atmosphere) return;
     // Drawn again only when the sky, the exposure or the view has changed: a reading of the ground's light changes none.
-    const key = `${state.utcMs}|${state.observer.ecef.join(",")}|${scale}|${angle}|${number("sky.stars.limitingMagnitude")}|${number("sky.stars.sizePx")}`;
+    const transform = starWorldTransform();
+    const key = `${state.utcMs}|${state.observer.ecef.join(",")}|${atmosphereKey}|${scale}|${angle}|${number("sky.stars.limitingMagnitude")}|${number("sky.stars.sizePx")}|${starSamples?.illumination === state}|${options.starAtmosphere ?? settings.get("sky.stars.atmosphere")}|${transform}`;
     if (stars && key === starKey) return;
     starKey = key;
+    starWorld = transform;
     stars ??= createStarField(scene, { clock: options.clock });
     starPixelAngle = angle;
+    const years = yearsFromJ2000(state.utcMs), limitingMagnitude = number("sky.stars.limitingMagnitude");
+    const currentStarBatch = (options.starAtmosphere ?? settings.get("sky.stars.atmosphere")) !== "page"
+      && starSamples?.illumination === state && starInputs?.catalogue === catalogue
+      && starInputs.years === Math.round(years) && starInputs.magnitude === limitingMagnitude
+      && starSamples.generation === starInputs.generation ? starSamples.result : null;
     starCost = stars.update({
       catalogue,
       toEcef: celestialToEcefMatrix(state.utcMs),
-      years: yearsFromJ2000(state.utcMs),
+      years,
       observer: state.observer,
       atmosphere,
+      atmosphereBatch: currentStarBatch,
       solarIlluminanceAt1AuLux: PHOTOMETRY.solarIlluminanceLux,
       scale,
       toScene: starToScene,
-      limitingMagnitude: number("sky.stars.limitingMagnitude"),
+      limitingMagnitude,
       sizePx: number("sky.stars.sizePx"),
       pixelAngle: starPixelAngle,
     });
@@ -911,7 +985,27 @@ export function createSkyRuntime(options: SkyRuntimeOptions): SkyRuntime {
       const moved = Math.max(angleDeg(sunLocal, lastSunLocal), moonLocal && lastMoonLocal ? angleDeg(moonLocal, lastMoonLocal) : 0, dipMoved);
       if (moved > angle || Math.abs(density - lastDensity) > number("sky.update.densityChange")) evaluate = true;
     }
-    if (evaluate || !illumination) {
+    if (evaluator) {
+      // Until the first result arrives the page shows no sky light; nothing is computed here.
+      if (evaluate || (!illumination && !evaluating && !waiting)) {
+        waiting = {
+          parameters: { aerosolOpticalDepth: number("sky.atmosphere.aerosolOpticalDepth"), groundAlbedo: number("sky.atmosphere.groundAlbedo") },
+          ephemeris, lunar: withMoon ? lunar : null, observer, nightLuminance: number("sky.night.luminance"),
+          dome: kind === "dome" ? {
+            layout: { zenithSamples: number("sky.dome.zenithSamples"), azimuthSamples: number("sky.dome.azimuthSamples"), integrationSteps: number("sky.dome.integrationSteps") },
+            moonlitSky: moonMode() === "sky",
+          } : null,
+          stars: kind === "dome" ? starAtmosphereRequest(ephemeris.utcMs) : null,
+        };
+        // Later motion is measured from what was asked for, as from what the page computes.
+        lastSunLocal = sunLocal;
+        lastMoonLocal = moonLocal;
+        lastDensity = density;
+        lastDipDeg = dipDeg;
+        evaluate = false;
+        sendEvaluation();
+      }
+    } else if (evaluate || !illumination) {
       const key = `${number("sky.atmosphere.aerosolOpticalDepth")}/${number("sky.atmosphere.groundAlbedo")}`;
       if (!atmosphere || key !== atmosphereKey) {
         atmosphere = createAtmosphere({
@@ -952,6 +1046,7 @@ export function createSkyRuntime(options: SkyRuntimeOptions): SkyRuntime {
     }
     // A new field of view or render height changes the stars' squares.
     if (stars && starPixelAngleChanged(starPixelAngle, pixelAngle())) present = true;
+    if (stars && starWorld !== starWorldTransform()) present = true;
     updateNightLights(observer, [sunEcef[0], sunEcef[1], sunEcef[2]]);
     if (present) {
       present = false;
@@ -960,12 +1055,81 @@ export function createSkyRuntime(options: SkyRuntimeOptions): SkyRuntime {
       // A map switch set its own background: the sky's goes back over it.
       applyBackground();
     }
-    if (!lighting) {
+    if (!lighting && illumination) {
       lighting = true;
       options.onLightingChange(true);
     }
     measureGroundLight();
     scheduleClock();
+  }
+
+  /** Sends the waiting request once nothing is outstanding. */
+  function sendEvaluation(): void {
+    if (!evaluator || evaluating || !waiting) return;
+    const request = waiting;
+    const sentIn = generation;
+    const used = evaluator;
+    waiting = null;
+    evaluating = true;
+    used.evaluate(request).then(result => {
+      evaluating = false;
+      if (disposed || used !== evaluator) return;
+      if (request.stars && "generation" in request.stars && result.stars?.generation === request.stars.generation) retainedStarGeneration = request.stars.generation;
+      if (sentIn === generation && model() !== "off") applyEvaluation(request, result);
+      sendEvaluation();
+    }, (error: unknown) => {
+      evaluating = false;
+      if (disposed || used !== evaluator) return;
+      // Retired: the page evaluates from the next frame, as without an evaluator.
+      retiredStatus = used.status();
+      evaluatorFailure = retiredStatus.failure ?? (error instanceof Error ? error.message : String(error));
+      evaluator = null;
+      retainedStarGeneration = null;
+      waiting = null;
+      try { used.dispose(); } catch { /* Already retired. */ }
+      evaluate = true;
+      options.requestRender();
+    });
+  }
+
+  /** Shows what the evaluator computed as the page would have computed it. */
+  function applyEvaluation(request: SkyEvaluationRequest, result: SkyEvaluationResult): void {
+    if (result.tables && result.groundTable) {
+      atmosphere = createAtmosphereFromTables(result.tables, clock);
+      atmosphereKey = `${request.parameters.aerosolOpticalDepth}/${request.parameters.groundAlbedo}`;
+      groundTable = result.groundTable;
+      cost.tablesMs = result.timing.tablesMs;
+      cost.tableBytes = result.timing.tableBytes;
+    }
+    illumination = result.illumination;
+    starSamples = request.stars && "generation" in request.stars && result.stars?.generation === request.stars.generation
+      ? { generation: request.stars.generation, illumination, result: result.stars } : null;
+    cost.illuminationMs = result.timing.illuminationMs;
+    ensureLights();
+    const kind = model();
+    if (kind === "dome") {
+      const target = ensureDome();
+      const filled = result.dome;
+      if (filled && filled.vertexCount === target.geometry.vertexCount && filled.rows === target.geometry.rows && filled.columns === target.geometry.columns) {
+        target.geometry.directions.set(filled.directions);
+        target.geometry.luminances.set(filled.luminances);
+        target.geometry.evaluations = filled.evaluations;
+        target.geometry.moonEvaluations = filled.moonEvaluations;
+        cost.domeMs = result.timing.domeMs;
+        cost.domeSamples = filled.evaluations;
+        cost.moonSamples = filled.moonEvaluations;
+        cost.domeVertices = filled.vertexCount;
+      } else evaluate = true;
+    } else {
+      disposeDome();
+      cost.domeMs = 0;
+      cost.domeSamples = 0;
+      cost.moonSamples = 0;
+      cost.domeVertices = 0;
+    }
+    cost.computations += 1;
+    present = true;
+    options.requestRender();
   }
 
   const stopWatching = settings.subscribe(changed => {
@@ -1000,6 +1164,11 @@ export function createSkyRuntime(options: SkyRuntimeOptions): SkyRuntime {
       receiver = next;
     },
     getNightLights: readNightLights,
+    getEvaluation: () => ({
+      placement: evaluator ? "worker" : "page",
+      retired: evaluatorFailure,
+      evaluator: evaluator?.status() ?? retiredStatus,
+    }),
     dispose() {
       if (disposed) return;
       disposed = true;
@@ -1012,7 +1181,11 @@ export function createSkyRuntime(options: SkyRuntimeOptions): SkyRuntime {
       catalogue = null;
       catalogueLoading = false;
       catalogueState = null;
+      const usedEvaluator = evaluator;
+      evaluator = null;
+      waiting = null;
       cleanupAll("Sky runtime disposal failed.", [
+        () => usedEvaluator?.dispose(),
         () => turnOff(false),
         stopWatching,
         () => { listeners.clear(); },

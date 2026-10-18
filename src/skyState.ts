@@ -1,5 +1,5 @@
 import { DEG_TO_RAD, RAD_TO_DEG } from "./units.js";
-import { ATMOSPHERE, radianceFanOf, type Atmosphere, type Rgb } from "./atmosphere.js";
+import { ATMOSPHERE, radianceFanOf, radianceFanRowsOf, type Atmosphere, type Rgb } from "./atmosphere.js";
 import { MOONLIGHT_TINT, moonIlluminanceLux, moonViewFrom, type LunarEphemeris, type MoonView } from "./lunarPosition.js";
 import { refractionFormulaDeg, SPA_REFRACTION_CUTOFF_DEG, sunDirectionFrom, type SolarEphemeris } from "./solarPosition.js";
 
@@ -574,6 +574,26 @@ function reserveRow(count: number): void {
   rowSamples = new Float64Array(count * 3);
 }
 
+// Every row at once, for a kernel that fans rows together: their directions, then what they see.
+let batchCapacity = 0;
+let batchRows = 0;
+let batchMus = new Float64Array(0);
+let batchCounts = new Uint32Array(0);
+let batchNus = new Float64Array(0);
+let batchSamples = new Float64Array(0);
+function reserveBatch(rows: number, count: number): void {
+  if (rows > batchRows) {
+    batchRows = rows;
+    batchMus = new Float64Array(rows);
+    batchCounts = new Uint32Array(rows);
+  }
+  if (count > batchCapacity) {
+    batchCapacity = count;
+    batchNus = new Float64Array(count);
+    batchSamples = new Float64Array(count * 3);
+  }
+}
+
 /**
  * Samples the sky for a dome: where each vertex looks, and the luminance
  * there. Rows crowd towards the horizon as seen from the observer's height,
@@ -628,6 +648,11 @@ export function fillSkyDome(dome: SkyDomeGeometry, atmosphere: Atmosphere, illum
   };
   const columnCount = half >= 0 ? Math.floor(half) + 1 : 0;
   reserveRow(Math.max(columnCount, columns));
+  // A kernel that fans rows together gets every row's directions at once, the
+  // same values a row at a time would give it; the rows are then laid out in
+  // the same order from its results.
+  const rowsFan = radianceFanRowsOf(atmosphere);
+  if (rowsFan) reserveBatch(rows, rows * Math.max(columnCount, columns));
   for (let column = 0; column <= half; column++) {
     // Columns crowd towards the Sun's bearing, where haze glows.
     const t = column / half;
@@ -636,19 +661,37 @@ export function fillSkyDome(dome: SkyDomeGeometry, atmosphere: Atmosphere, illum
     rowSin[column] = Math.sin(phi);
   }
   let evaluations = 0;
+  let sunlitBatch = false;
+  if (rowsFan) {
+    for (let row = 0; row < rows; row++) {
+      const theta = angles[row];
+      const mu = Math.cos(theta);
+      const sinView = Math.sin(theta);
+      const offset = row * columnCount;
+      batchMus[row] = mu;
+      batchCounts[row] = columnCount;
+      for (let column = 0; column <= half; column++) batchNus[offset + column] = mu * muSun + sinView * sinSun * rowCos[column];
+    }
+    sunlitBatch = rowsFan(altitude, muSun, rows, batchMus, batchCounts, batchNus, steps, batchSamples);
+  }
   for (let row = 0; row < rows; row++) {
     const theta = angles[row];
     const mu = Math.cos(theta);
     const sinView = Math.sin(theta);
     const aboveHorizon = theta <= horizon;
-    for (let column = 0; column <= half; column++) rowNus[column] = mu * muSun + sinView * sinSun * rowCos[column];
-    sampled(mu, muSun, columnCount);
+    let samples = rowSamples, first = 0;
+    if (sunlitBatch) { samples = batchSamples; first = row * columnCount * 3; }
+    else {
+      for (let column = 0; column <= half; column++) rowNus[column] = mu * muSun + sinView * sinSun * rowCos[column];
+      sampled(mu, muSun, columnCount);
+    }
     evaluations += columnCount;
     const extra = aboveHorizon ? night : night * albedo;
     for (let column = 0; column <= half; column++) {
       const x = sinView * rowCos[column];
       const z = sinView * rowSin[column];
-      const s0 = rowSamples[column * 3], s1 = rowSamples[column * 3 + 1], s2 = rowSamples[column * 3 + 2];
+      const at = first + column * 3;
+      const s0 = samples[at], s1 = samples[at + 1], s2 = samples[at + 2];
       let index = (row * columns + column) * 3;
       dome.directions[index] = x;
       dome.directions[index + 1] = mu;
@@ -676,24 +719,43 @@ export function fillSkyDome(dome: SkyDomeGeometry, atmosphere: Atmosphere, illum
   const muMoon = moon ? Math.sin(moon.elevationDeg * DEG_TO_RAD) : 0;
   // A dome of whole rows and columns is lit a row at a time; any other, a vertex at a time.
   if (moonlit && moon && moonAxes && Number.isInteger(rows) && Number.isInteger(columns)) {
-    for (let row = 0; row < rows; row++) {
+    let moonlitBatch = false;
+    if (rowsFan) {
+      for (let row = 0, at = 0; row < rows; row++) {
+        const base = row * columns;
+        const dy = dome.directions[base * 3 + 1];
+        let count = 0;
+        for (let column = 0; column < columns; column++) {
+          const index = (base + column) * 3;
+          if (dome.directions[index + 1] === dy) batchNus[at + count++] = dome.directions[index] * moonAxes[0] + dy * moonAxes[1] + dome.directions[index + 2] * moonAxes[2];
+        }
+        batchMus[row] = dy;
+        batchCounts[row] = count;
+        at += count;
+      }
+      moonlitBatch = rowsFan(altitude, muMoon, rows, batchMus, batchCounts, batchNus, steps, batchSamples);
+    }
+    for (let row = 0, first = 0; row < rows; row++) {
       // A row's vertices share its line of sight's height (the same float32 mu);
       // any that does not is sampled on its own.
       const base = row * columns;
       const dy = dome.directions[base * 3 + 1];
-      let count = 0;
-      for (let column = 0; column < columns; column++) {
-        const index = (base + column) * 3;
-        if (dome.directions[index + 1] === dy) rowNus[count++] = dome.directions[index] * moonAxes[0] + dy * moonAxes[1] + dome.directions[index + 2] * moonAxes[2];
+      let samples = rowSamples, k = 0;
+      if (moonlitBatch) { samples = batchSamples; k = first; first += batchCounts[row]; }
+      else {
+        let count = 0;
+        for (let column = 0; column < columns; column++) {
+          const index = (base + column) * 3;
+          if (dome.directions[index + 1] === dy) rowNus[count++] = dome.directions[index] * moonAxes[0] + dy * moonAxes[1] + dome.directions[index + 2] * moonAxes[2];
+        }
+        sampled(dy, muMoon, count);
       }
-      sampled(dy, muMoon, count);
-      let k = 0;
       for (let column = 0; column < columns; column++) {
         const index = (base + column) * 3;
         const dx = dome.directions[index], vy = dome.directions[index + 1], dz = dome.directions[index + 2];
         let s0, s1, s2;
         if (vy === dy) {
-          s0 = rowSamples[k * 3]; s1 = rowSamples[k * 3 + 1]; s2 = rowSamples[k * 3 + 2];
+          s0 = samples[k * 3]; s1 = samples[k * 3 + 1]; s2 = samples[k * 3 + 2];
           k++;
         } else {
           atmosphere.radiance(altitude, vy, muMoon, dx * moonAxes[0] + vy * moonAxes[1] + dz * moonAxes[2], steps, sample);
