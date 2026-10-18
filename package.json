@@ -59,6 +59,7 @@
     "ci": "npm run check:implementation",
     "generate:stars": "node scripts/sky/build-star-catalogue.mjs",
     "generate:solar-terms": "node scripts/sky/extract-spa-terms.mjs",
+    "generate:atmosphere-tables": "node scripts/sky/build-atmosphere-tables.mjs",
     "check:implementation": "npm run typecheck && npm run lint && npm test && npm run build && npm run typecheck:consumer && npm run typecheck:validation",
     "typecheck:validation": "tsc -p scripts/validation/tsconfig.json --noEmit --tsBuildInfoFile node_modules/.tmp/sky-validation.tsbuildinfo",
     "validate:model": "node scripts/validation/sky-model.mjs",

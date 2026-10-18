@@ -39,8 +39,10 @@ Call the optional `atmosphere.dispose()` before replacing a native atmosphere.
 
 The optional `ports.createTables(parameters)` builds transmittance, multiple
 scattering and ground irradiance in the worker as well. The first complete table
-set is compared exactly with JavaScript and the reference tables are used for
-that atmosphere. Reuse one ports object per worker: subsequent builds may skip
+set is compared exactly with JavaScript's, which for the default atmosphere
+include the two precomputed ones ([Data and generation tools](#data-and-generation-tools)),
+and the reference tables are used for that atmosphere.
+Reuse one ports object per worker: subsequent builds may skip
 the JavaScript precompute after that comparison. Table failure or mismatch
 permanently disables native work for that ports object. Status includes the
 actual table backend and table parity independently of query parity.
@@ -91,11 +93,14 @@ This guarantees that cleanup is attempted and stale callbacks are suppressed. If
 
 `starCatalogue.ts` holds the 9,096-entry Bright Star Catalogue data with its original source notices. Copying the project license does not grant any additional rights to that data.
 
-Two tools regenerate committed data from inputs you supply. They download nothing and write under a dated `build/generated` directory by default; an optional output path must be inside this repository.
+`precomputedAtmosphereTables.ts` holds two of the atmosphere's three tables for the settings' default haze and ground albedo: light scattered more than once and the sky's light on level ground, as `createAtmosphere` builds them, bit for bit. For those parameters `createAtmosphere` starts from them and builds only the transmittance, in about 26 ms instead of 115 ms on the development Mac (single-threaded, not qualified). Other parameters build all three. `src/precomputedAtmosphereTables.test.ts` fails when the tables are no longer what `src/atmosphere.ts` builds, or no longer for the settings' defaults.
+
+Three tools regenerate committed data. The star catalogue and the solar terms come from inputs you supply; the atmosphere tables come from this checkout's `src/atmosphere.ts` and `src/settings.ts`. The tools download nothing and write under a dated `build/generated` directory by default; an optional output path must be inside this repository.
 
 ```sh
 npm run generate:stars -- <catalog> [output]
 npm run generate:solar-terms -- <layout-text> [output]
+npm run generate:atmosphere-tables -- [output]
 ```
 
 The committed generated records are the ones the package uses.

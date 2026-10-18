@@ -1,4 +1,5 @@
 import { attachAtmosphereNumericKernel, prepareAtmosphereNumericTables, finishAtmosphereNumericTables, type AtmosphereNumericPorts } from "./atmosphereNumericKernel.js";
+import { PRECOMPUTED_ATMOSPHERE_TABLES } from "./precomputedAtmosphereTables.js";
 
 /**
  * A clear atmosphere of air molecules, haze and ozone around a spherical
@@ -185,6 +186,33 @@ function sunAxis(least: number, twilight: number, day: number): SunAxis {
   };
 }
 
+/**
+ * The tables of light scattered more than once and of the sky's light on level ground that
+ * precomputedAtmosphereTables.ts keeps for exactly these parameters, decoded, or null. They are what the
+ * loops below would build, so an atmosphere with them only builds its transmittance.
+ */
+function precomputedTables(aerosol: number, albedo: number): { multipleScattering: Float32Array; groundIrradiance: Float32Array } | null {
+  const kept = PRECOMPUTED_ATMOSPHERE_TABLES.find(tables => Object.is(tables.aerosolOpticalDepth, aerosol) && Object.is(tables.groundAlbedo, albedo));
+  if (!kept) return null;
+  const multipleScattering = float32s(kept.multipleScattering);
+  const groundIrradiance = float32s(kept.groundIrradiance);
+  const suns = TABLES.multipleScatteringTwilightSuns + TABLES.multipleScatteringDaySuns;
+  return multipleScattering.length === suns * TABLES.multipleScatteringHeights * 3
+    && groundIrradiance.length === (TABLES.groundIrradianceTwilightSuns + TABLES.groundIrradianceDaySuns) * 3
+    ? { multipleScattering, groundIrradiance } : null;
+}
+
+/** Little-endian float32s from base64. */
+function float32s(base64: string): Float32Array {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index++) bytes[index] = binary.charCodeAt(index);
+  const view = new DataView(bytes.buffer);
+  const values = new Float32Array(bytes.length >> 2);
+  for (let index = 0; index < values.length; index++) values[index] = view.getFloat32(index * 4, true);
+  return values;
+}
+
 /** Rayleigh's phase function, sr⁻¹. */
 export function rayleighPhase(nu: number): number {
   return (3 / (16 * Math.PI)) * (1 + nu * nu);
@@ -296,11 +324,14 @@ export function createAtmosphere(parameters: AtmosphereParameters, now: () => nu
   }
 
   // ─── Light scattered more than once ─────────────────────────────────
+  // This table and the sky's light on level ground cost the most to build. For the settings' default
+  // atmosphere they come built (precomputedAtmosphereTables.ts).
+  const prebuilt = inheritedTables ?? precomputedTables(aerosol, albedo);
   const msHeights = TABLES.multipleScatteringHeights;
   const msAxis = sunAxis(TABLES.twilightMinCosine, TABLES.multipleScatteringTwilightSuns, TABLES.multipleScatteringDaySuns);
   const msSuns = msAxis.samples;
-  const multipleScattering = inheritedTables?.multipleScattering.slice() ?? new Float32Array(msSuns * msHeights * 3);
-  let multipleScatteringReady = !!inheritedTables;
+  const multipleScattering = prebuilt?.multipleScattering.slice() ?? new Float32Array(msSuns * msHeights * 3);
+  let multipleScatteringReady = !!prebuilt;
   const psi: Rgb = [0, 0, 0];
   function multipleScatteringAt(r: number, muSun: number, out: Rgb): void {
     if (!multipleScatteringReady || muSun <= TABLES.twilightMinCosine) {
@@ -326,8 +357,8 @@ export function createAtmosphere(parameters: AtmosphereParameters, now: () => nu
   // ─── One ray through the air ────────────────────────────────────────
   // The sky's light on level ground, from a table of logarithms (TABLES.logFloor).
   const groundAxis = sunAxis(TABLES.groundIrradianceMinCosine, TABLES.groundIrradianceTwilightSuns, TABLES.groundIrradianceDaySuns);
-  const groundIrradiance = inheritedTables?.groundIrradiance.slice() ?? new Float32Array(groundAxis.samples * 3);
-  let groundIrradianceReady = !!inheritedTables;
+  const groundIrradiance = prebuilt?.groundIrradiance.slice() ?? new Float32Array(groundAxis.samples * 3);
+  let groundIrradianceReady = !!prebuilt;
   function groundSkyIrradiance(muSun: number, out: Rgb): Rgb {
     if (!groundIrradianceReady) {
       out[0] = 0; out[1] = 0; out[2] = 0;
@@ -438,7 +469,7 @@ export function createAtmosphere(parameters: AtmosphereParameters, now: () => nu
   const pending = new Float32Array(multipleScattering.length);
   const zeniths = TABLES.multipleScatteringZeniths;
   const azimuths = TABLES.multipleScatteringAzimuths;
-  if (!inheritedTables) for (let v = 0; v < msHeights; v++) {
+  if (!prebuilt) for (let v = 0; v < msHeights; v++) {
     const r = RG + (RT - RG) * (v / (msHeights - 1));
     for (let u = 0; u < msSuns; u++) {
       const muSun = msAxis.cosine(u);
@@ -464,7 +495,7 @@ export function createAtmosphere(parameters: AtmosphereParameters, now: () => nu
       }
     }
   }
-  if (!inheritedTables) multipleScattering.set(pending);
+  if (!prebuilt) multipleScattering.set(pending);
   multipleScatteringReady = true;
 
   function radianceAt(altitudeMeters: number, mu: number, muSun: number, nu: number, steps: number, out: Rgb): Rgb {
@@ -630,7 +661,7 @@ export function createAtmosphere(parameters: AtmosphereParameters, now: () => nu
     return out;
   }
 
-  if (!inheritedTables) for (let i = 0; i < groundAxis.samples; i++) {
+  if (!prebuilt) for (let i = 0; i < groundAxis.samples; i++) {
     skyIrradiance(0, groundAxis.cosine(i), scratch);
     for (let c = 0; c < 3; c++) groundIrradiance[i * 3 + c] = Math.log(Math.max(TABLES.logFloor, scratch[c]));
   }

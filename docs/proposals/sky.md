@@ -115,9 +115,11 @@ name.
 | 3, planned | | The sky computed per pixel from a sky-view table on the GPU, and aerial perspective: distant terrain hazed and coloured by the air between | Table passes | Lookups per pixel | Half-float render targets | WebGL 2, WebGPU |
 | 4, planned | | Volumetric clouds, ray-marched at reduced resolution and reconstructed over frames | | Compute passes | 3D textures | WebGPU |
 
-Shared by rungs 1 to 4: the atmosphere's tables, 106 KiB, built in about 50 ms
-when the haze or the ground albedo changes; the Sun's position, 6 µs; and the
-Moon's, 11 µs. Milliseconds are single-threaded JavaScript on the development Mac
+Shared by rungs 1 to 4: the atmosphere's tables, 106 KiB, built in about 115 ms
+when the haze or the ground albedo changes, and in 26 ms for the default haze and
+albedo, whose two costliest tables come precomputed
+([precomputedAtmosphereTables.ts](../../src/precomputedAtmosphereTables.ts));
+the Sun's position, 6 µs; and the Moon's, 11 µs. Milliseconds are single-threaded JavaScript on the development Mac
 while in use, not qualified measurements (`cost.qualified: false` in the
 [evidence](../../validation/evidence/sky/2026-10-07-sky-model/sky-model.json)).
 
