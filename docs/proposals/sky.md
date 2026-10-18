@@ -791,9 +791,9 @@ Every parameter has one home.
 
 | Tab, section | Parameter | Unit, bounds | Default |
 | --- | --- | --- | --- |
-| Date and time | `sky.time.mode` | Now, A set time | Now |
-| | `sky.time.date` | UTC date, year-month-day | 2026-06-21 |
-| | `sky.time.utcHours` | h, 0 to 24, to the second | 18 |
+| Date and time | `sky.time.mode` | Now, A set time | A set time |
+| | `sky.time.date` | UTC date, year-month-day | 2026-04-20 |
+| | `sky.time.utcHours` | h, 0 to 24, to the second | 22.53: 22:31:52 UTC, 16:20 solar time in Minneapolis, when the Sun lines up with the shadows in its Google 3D Tiles |
 | Sky, Atmosphere and illumination | `sky.model` | Off, Lights, Dome | Dome |
 | | `renderer.ambientFillMultiplier` | ratio, 0 to 4; shown with the model off | 1 |
 | | `sky.atmosphere.aerosolOpticalDepth` | optical depth, 0 to 1.5 | 0.1 |

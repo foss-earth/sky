@@ -58,7 +58,7 @@ describe("Date and time tab", () => {
 
   it("follows the clock until a moment is pressed, and Now follows it again", () => {
     const { settings, panel, timeDial, mark, button, clock, knob } = mount();
-    expect(settings.get("sky.time.mode")).toBe("now");
+    settings.set("sky.time.mode", "now");
     expect(button("Now").getAttribute("aria-pressed")).toBe("true");
     expect(clock()).toBe("2026-10-07 13:59");
     mark(timeDial, "sunset");

@@ -11,6 +11,8 @@ afterEach(() => document.body.replaceChildren());
 function harness(page: Document = globalThis.document) {
   const document = page;
   const settings = createSettingsRegistry({ storage: null }); settings.register(SKY_PARAMETERS); for (const [tab, section, title] of SKY_SECTION_TITLES) settings.setSectionTitle(tab, section, title);
+  // The panels follow the host's clock below; the default is a set time.
+  settings.set("sky.time.mode", "now");
   const dials: { options: DialOptions; frame: DialFrame | null; destroy: ReturnType<typeof vi.fn> }[] = [];
   const sectionDestroy = vi.fn(); const hostDestroy = vi.fn(); const sectionOptions: unknown[] = [];
   const ui: SkyDateTimeUiPorts = {
