@@ -1,5 +1,5 @@
 import type { SettingsStorage } from "@foss-earth/ui/settings";
-import type { createParameterSection, createSectionsElement, appendHostSections } from "@foss-earth/ui/browser";
+import type { createParameterSection, createSectionsElement, appendHostSections, createHelpTooltip, createIconButton } from "@foss-earth/ui/browser";
 /** Temporary structural dial contract; generic implementation stays UI-owned. */
 export interface DialMark {
   id: string;
@@ -68,6 +68,10 @@ export interface SkyPanelUiPorts {
   createParameterSection: typeof createParameterSection;
   createSectionsElement: typeof createSectionsElement;
   appendHostSections: typeof appendHostSections;
+  /** The trailing **?** that holds what a line leaves out. */
+  createHelpTooltip: typeof createHelpTooltip;
+  /** A compact action with a mark and its full name, such as Open Date and time. */
+  createIconButton: typeof createIconButton;
 }
 export interface SkyDateTimeUiPorts extends SkyPanelUiPorts {
   createDial(options: DialOptions): DialHandle;

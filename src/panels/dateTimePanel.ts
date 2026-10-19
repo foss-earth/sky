@@ -144,7 +144,7 @@ export function createDateTimePanel(options: DateTimePanelOptions): DateTimePane
   let disposed = false;
   const settings = options.settings;
   const now = options.now;
-  const { createParameterSection, createSectionsElement, appendHostSections } = options.ui;
+  const { createParameterSection, createSectionsElement, appendHostSections, createHelpTooltip } = options.ui;
   const deviceZone = options.deviceZone ?? deviceClockZone;
   const { createDial, wrapTurn } = options.ui;
   /** The time dial: midnight at the bottom and noon at the top, the morning on the left. */
@@ -277,16 +277,20 @@ export function createDateTimePanel(options: DateTimePanelOptions): DateTimePane
     },
   });
 
+  // What the dials read and which zone each clock keeps, behind the ? after them.
+  const placeLine = document.createElement("p");
+  const zoneLine = document.createElement("p");
+  const explanation = document.createElement("div");
+  explanation.append(placeLine, zoneLine);
+  const help = createHelpTooltip({ label: "Explain solar time and time zones", content: explanation });
   const dials = document.createElement("div");
   dials.className = "foss-earth-choices foss-earth-date-time__dials";
-  dials.append(timeDial.element, dateDial.element);
+  dials.append(timeDial.element, dateDial.element, help.element);
   const instantLine = line(document);
-  const zoneLine = line(document);
   const sunLine = line(document);
-  const placeLine = line(document);
   const main = document.createElement("div");
   main.className = "foss-earth-date-time";
-  main.append(dials, instantLine, zoneLine, sunLine, placeLine);
+  main.append(dials, instantLine, sunLine);
 
   const onNow = (): void => { if (!disposed) settings.set("sky.time.mode", "now"); };
   const onToday = (): void => {
@@ -425,9 +429,8 @@ export function createDateTimePanel(options: DateTimePanelOptions): DateTimePane
     const utcRounded = Math.round(utcMs / TIME.minuteMs) * TIME.minuteMs;
     const utc = `${isoDate(utcRounded)} ${clockTime((utcRounded - solarDayStartMs(utcRounded)) / HOUR_MS)} UTC`;
     const device = new Date(utcMs).toLocaleString(undefined, { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", timeZoneName: "short" });
-    instantLine.textContent = current.following
-      ? `Now, ${device} by this device's clock: ${clockTime(hours)} solar time on ${date} at the place shown, which is ${utc}.`
-      : `A set time: ${clockTime(hours)} solar time on ${date} at the place shown. It is ${utc}, and ${device} on this device's clock.`;
+    // The dials show the solar time and date; the line gives the same instant by the clocks.
+    instantLine.textContent = `${current.following ? "Now" : "Set time"}: ${utc} · ${device} on this device`;
     // Which zone each of those is in. The dials are in none: solar time is the place's own.
     const zone = deviceZone(utcMs);
     const kept = `${zone.name}, ${utcOffsetText(zone.offsetMinutes)}${zone.id ? ` (${zone.id})` : ""}`;
@@ -438,7 +441,7 @@ export function createDateTimePanel(options: DateTimePanelOptions): DateTimePane
     const daylight = sun.rise === null || sun.set === null ? 0 : Math.round((sun.set - sun.rise) * 60);
     sunLine.textContent = sun.always === "above" ? "The Sun stays above the horizon all day."
       : sun.always === "below" ? "The Sun stays below the horizon all day."
-        : `Sunrise ${clockTime(sun.rise!)} and sunset ${clockTime(sun.set!)}, solar time: ${Math.floor(daylight / 60)} h ${pad(daylight % 60, 2)} min of daylight.`;
+        : `Sunrise ${clockTime(sun.rise!)} · sunset ${clockTime(sun.set!)} solar · ${Math.floor(daylight / 60)} h ${pad(daylight % 60, 2)} min daylight`;
     placeLine.textContent = current.known
       ? `Solar time is what a sundial reads at the place shown, ${describePlace(current.place)}: 12:00 with the Sun at its highest. Turning a dial on past midnight or the year's end carries on into the next day or year.`
       : "The place shown is not known yet, so the dials read a sundial at 0° N, 0° E.";
@@ -475,6 +478,7 @@ export function createDateTimePanel(options: DateTimePanelOptions): DateTimePane
       dateField.removeEventListener("keydown", onFieldKey);
       timeDial.destroy();
       dateDial.destroy();
+      help.destroy();
       section.destroy();
       hostSections.destroy();
       sections.destroy();

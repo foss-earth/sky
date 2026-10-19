@@ -40,6 +40,15 @@ export function describeSun(settings: SettingsRegistry, place: { latDeg: number;
   return `${following ? `Now, ${when}` : `At the set time, ${when}`}, the Sun is ${Math.abs(elevation).toFixed(1)}° ${elevation < 0 ? "below" : "above"} the horizon at the place shown, bearing ${Math.round(sun.azimuthDeg) % 360}°.`;
 }
 
+/** Where the Sun is, in a few words: "Now: Sun 12.3° up · bearing 213°". `describeSun` says it in full. */
+export function sunSummary(settings: SettingsRegistry, place: { latDeg: number; lonDeg: number } | null, now: () => number): string {
+  if (!place) return "Place not known yet";
+  const { utcMs, following } = instantInUse(settings, now);
+  const sun = solarPosition({ utcMs, latDeg: place.latDeg, lonDeg: place.lonDeg });
+  const elevation = 90 - sun.zenithDeg;
+  return `${following ? "Now" : "Set time"}: Sun ${Math.abs(elevation).toFixed(1)}° ${elevation < 0 ? "down" : "up"} · bearing ${Math.round(sun.azimuthDeg) % 360}°`;
+}
+
 /**
  * The contents of the Sky tab: where the Sun is, with a link to the Date and
  * time tab that sets the time; then the atmosphere and the sky model, the
@@ -51,28 +60,30 @@ export function createSkyPanel(options: SkyPanelOptions): SkyPanelHandle {
   const settings = options.settings;
   let disposed = false;
   const now = options.now;
-  const { createParameterSection, createSectionsElement, appendHostSections } = options.ui;
+  const { createParameterSection, createSectionsElement, appendHostSections, createHelpTooltip, createIconButton } = options.ui;
 
-  // Where the Sun is, and a link to the tab that sets when.
+  // "Now: Sun 12.3° up · bearing 213° [clock] [?]": where the Sun is, a link to the tab that sets when, and the full sentence.
   const sun = document.createElement("div");
   sun.className = "foss-earth-choices foss-earth-sky-sun";
   const line = document.createElement("p");
-  line.className = "foss-earth-choices__note";
+  line.className = "foss-earth-choices__note foss-earth-sky-sun__line";
   sun.append(line);
   const open = options.openDateTime;
-  const link = open ? document.createElement("button") : null;
+  const link = open ? createIconButton(document, { icon: "clock", label: "Open Date and time" }) : null;
   if (link && open) {
-    link.type = "button";
-    link.className = "foss-earth-choice foss-earth-parameter__action";
-    link.textContent = "Date and time";
-    link.title = "Opens the Date and time tab, whose dials set the time the Sun is placed for.";
     link.addEventListener("click", open);
     sun.append(link);
   }
+  const full = document.createElement("p");
+  const help = createHelpTooltip({ label: "Explain where the Sun is", content: full });
+  sun.append(help.element);
   const describe = (): void => {
     if (disposed) return;
-    const text = describeSun(settings, options.getPlace(), now);
+    const place = options.getPlace();
+    const text = sunSummary(settings, place, now);
     if (line.textContent !== text) line.textContent = text;
+    const sentence = `${describeSun(settings, place, now)}${open ? " The Date and time tab sets when." : ""}`;
+    if (full.textContent !== sentence) full.textContent = sentence;
   };
   describe();
 
@@ -101,6 +112,7 @@ export function createSkyPanel(options: SkyPanelOptions): SkyPanelHandle {
       stopRefresh();
       unsubscribe();
       if (link && open) link.removeEventListener("click", open);
+      help.destroy();
       for (const { handle } of own) handle.destroy();
       hostSections.destroy();
       sections.destroy();

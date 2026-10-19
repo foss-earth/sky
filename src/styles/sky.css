@@ -2,11 +2,15 @@
 .foss-earth-sky-tab,
 .foss-earth-date-time-tab {
   display: grid;
-  gap: 12px;
+  gap: 3px;
 }
 
 .foss-earth-date-time {
   display: grid;
-  gap: 8px;
+  gap: 3px;
 }
 
+/* "Now: Sun 12.3° up · bearing 213° [clock] [?]": the line keeps its width so the actions follow it. */
+.foss-earth-sky-sun > .foss-earth-sky-sun__line {
+  flex: 0 1 auto;
+}
