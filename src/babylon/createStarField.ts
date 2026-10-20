@@ -195,6 +195,17 @@ export function createStarField(scene: Scene, options: { clock(): number }): Sta
       const half = (view.sizePx / 2) * view.pixelAngle;
       const solidAngle = (2 * half) ** 2;
       const toValue = view.scale / (solidAngle * image.mean);
+      const batch = view.atmosphereBatch ?? null;
+      const batchEcef = batch?.ecef.length === directions.length ? batch.ecef : null;
+      const workerColors = batch?.colors?.rgb.length === directions.length && Object.is(batch.colors.toValue, toValue) ? batch.colors : null;
+      const workerTransmittance = batchEcef && batch?.transmittance.length === directions.length;
+      const evaluated = workerColors || workerTransmittance ? "worker" : "page";
+      // No star can reach the share drawn at this exposure, whatever the air: the field would not be drawn,
+      // so its squares and colours, and the air on each star's line of sight, are not worked out.
+      if (!starsCouldShow(view)) {
+        mesh.setEnabled(false);
+        return { stars: count, updateMs: options.clock() - started, visible: false, atmosphere: evaluated };
+      }
       const up = view.observer.up;
       const altitude = Math.max(0, view.observer.altitudeMeters);
       const { catalogue, solarIlluminanceAt1AuLux } = view;
@@ -209,10 +220,6 @@ export function createStarField(scene: Scene, options: { clock(): number }): Sta
         lightOf = { catalogue, solarIlluminanceAt1AuLux, stars: count };
       }
       const m = view.toEcef;
-      const batch = view.atmosphereBatch ?? null;
-      const batchEcef = batch?.ecef.length === directions.length ? batch.ecef : null;
-      const workerColors = batch?.colors?.rgb.length === directions.length && Object.is(batch.colors.toValue, toValue) ? batch.colors : null;
-      const workerTransmittance = batchEcef && batch?.transmittance.length === directions.length;
       const colorInputs = [altitude, ...up, ...m, toValue, solarIlluminanceAt1AuLux];
       const reuseColors = colorState && colorState.atmosphere === view.atmosphere && colorState.catalogue === catalogue
         && colorState.directions === directions && colorState.batch === batch && colorInputs.every((value, index) => Object.is(value, colorState!.inputs[index]));
@@ -278,7 +285,7 @@ export function createStarField(scene: Scene, options: { clock(): number }): Sta
         if (!reuseColors) mesh.updateVerticesData(VertexBuffer.ColorKind, colors, false, false);
       }
       mesh.setEnabled(visible);
-      return { stars: count, updateMs: options.clock() - started, visible, atmosphere: workerColors || workerTransmittance ? "worker" : "page" };
+      return { stars: count, updateMs: options.clock() - started, visible, atmosphere: evaluated };
     },
     dispose() {
       if (disposed) return;
