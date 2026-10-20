@@ -34,10 +34,38 @@
       "source": "./src/catalogue.ts",
       "types": "./dist/catalogue.d.ts",
       "import": "./dist/catalogue.js"
-    }
+    },
+    "./sky-TS": {
+      "types": "./sky-TS/index.d.ts",
+      "source": "./sky-TS/index.js",
+      "import": "./sky-TS/index.js",
+      "default": "./sky-TS/index.js"
+    },
+    "./sky-WASM": {
+      "types": "./sky-WASM/index.d.ts",
+      "source": "./sky-WASM/index.js",
+      "import": "./sky-WASM/index.js",
+      "default": "./sky-WASM/index.js"
+    },
+    "./sky-WASM/shared": {
+      "types": "./sky-WASM/shared.d.ts",
+      "source": "./sky-WASM/sharedCore.js",
+      "import": "./sky-WASM/sharedCore.js",
+      "default": "./sky-WASM/sharedCore.js"
+    },
+    "./sky-WASM/helper": {
+      "types": "./sky-WASM/helper.d.ts",
+      "source": "./sky-WASM/helper.js",
+      "import": "./sky-WASM/helper.js",
+      "default": "./sky-WASM/helper.js"
+    },
+    "./sky-WASM/wasm": "./sky-WASM/single/sky.wasm",
+    "./sky-WASM/shared/wasm": "./sky-WASM/shared/sky-shared.wasm"
   },
   "files": [
     "dist",
+    "sky-TS",
+    "sky-WASM",
     "LICENSE",
     "NOTICE",
     "README.md",
@@ -56,6 +84,11 @@
     "test": "vitest run --maxWorkers=50%",
     "test:consumer": "node scripts/check-installed-artifact.mjs",
     "typecheck:consumer": "tsc -p fixtures/consumer/tsconfig.json",
+    "build:wasm": "node sky-WASM/scripts/build.mjs && node sky-WASM/scripts/build-shared.mjs",
+    "check:wasm": "node sky-WASM/scripts/check.mjs",
+    "check:parity": "npm run build && node sky-WASM/scripts/check-sky.mjs && node sky-WASM/scripts/check-sky-shared.mjs",
+    "test:wasm": "node --test sky-WASM/tests/*.test.mjs",
+    "test:rust": "cargo +stable test --locked --offline --manifest-path sky-WASM/Cargo.toml --target-dir build/sky-WASM/target/test",
     "ci": "npm run check:implementation",
     "generate:stars": "node scripts/sky/build-star-catalogue.mjs",
     "generate:solar-terms": "node scripts/sky/extract-spa-terms.mjs",

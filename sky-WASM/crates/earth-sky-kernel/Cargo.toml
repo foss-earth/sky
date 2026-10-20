@@ -1,0 +1,10 @@
+[package]
+name = "earth-sky-kernel"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99"
+license = "AGPL-3.0-only"
+description = "Allocation-free atmosphere arithmetic shared by the FOSS Earth single and shared-memory sky cores"
+
+[lib]
+crate-type = ["rlib"]

@@ -14,6 +14,8 @@ This repository owns the solar and lunar position models, the clear-atmosphere a
 | `@foss-earth/sky/panels` | `createSkyPanel`, `createDateTimePanel`, the UI, refresh and storage ports, and structural dial types. |
 | `@foss-earth/sky/babylon` | Optional `createSkyRuntime`, night-light tiles, star and point resources, the ground probe, structural terrain ports and `bindSkyReadingsAndNotes`. It uses the Scene you supply. |
 | `@foss-earth/sky/styles.css` | Layout for the Sky and Date and time containers. Generic controls and dials are styled by the UI package. |
+| `@foss-earth/sky/sky-TS` | The TypeScript sky core that the WebAssembly builds must match: tables, atmosphere and the worker evaluation. |
+| `@foss-earth/sky/sky-WASM`, `/sky-WASM/shared`, `/sky-WASM/helper` | Its Rust/WebAssembly twin, single-threaded or shared-memory with helper threads, for workers only. `/sky-WASM/wasm` and `/sky-WASM/shared/wasm` are the binaries. See [sky-WASM](sky-WASM/README.md). |
 
 The pure and panel exports create no renderer, read no browser globals on import, and import no React, Babylon, engine or application code. Panel DOM is created only when a factory is called. UI registry types are type-only imports. The optional Babylon entry needs the public `@foss-earth/ui` contract and `@babylonjs/core` 8.56.2 as peer dependencies (both optional in `package.json`).
 
@@ -49,8 +51,9 @@ actual table backend and table parity independently of query parity.
 
 The source port rejects a browser page and adds no engine dependency or app
 wiring. The host owns bounded asynchronous startup and the worker lifecycle.
-The corresponding `native/packages/native-sky` Rust/WASM implementation is an
-unvalidated partial conversion: astronomy, dome filling and
+The Rust/WASM twin, [sky-WASM](sky-WASM/README.md), is in this repository. It
+is a partial conversion whose tables and worker evaluations match this
+TypeScript bit for bit (`npm run check:parity`): astronomy, dome filling and
 renderer integration remain JavaScript. It has no qualified speed/power claim.
 
 ### Observer and clock
@@ -113,7 +116,7 @@ The committed generated records are the ones the package uses.
 
 This package names other `@foss-earth/*` libraries (`engine`, `renderer`, `research` and `ui`) by versions that are not published yet. Its own `npm install`, tests and build therefore do not work on their own. Develop it through the app, which uses libraries straight from their checkouts: see [Local source](https://github.com/foss-earth/app#local-source).
 
-Scripts in `package.json`: `build`, `typecheck`, `lint`, `test`, `test:consumer`, `typecheck:consumer`, `typecheck:validation` and `ci`.
+Scripts in `package.json`: `build`, `typecheck`, `lint`, `test`, `test:consumer`, `typecheck:consumer`, `typecheck:validation` and `ci`. The WebAssembly twin adds `build:wasm`, `check:wasm` (build receipts), `check:parity` (builds, then checks both builds against the TypeScript), `test:wasm` and `test:rust`; see [sky-WASM](sky-WASM/README.md).
 
 Other documents: [source specifications](docs/source-specifications.md), [Sky proposal](docs/proposals/sky.md), [lighting implementation prompt](docs/sky-lighting-implementation-prompt.md). `fixtures/consumer/minimal.ts` shows every public type surface with explicit host ports.
 

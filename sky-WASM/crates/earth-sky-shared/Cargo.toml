@@ -1,0 +1,13 @@
+[package]
+name = "earth-sky-shared"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99"
+license = "AGPL-3.0-only"
+description = "Shared-memory cooperating-thread sky radiance fans for FOSS Earth"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+earth-sky-kernel = { path = "../earth-sky-kernel" }

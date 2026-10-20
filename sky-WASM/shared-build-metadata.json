@@ -1,0 +1,104 @@
+{
+  "schema": 1,
+  "core": "sky-shared",
+  "abiVersion": 1,
+  "rust": "rustc 1.99.0 (b940084d7 2026-09-28)",
+  "cargo": "cargo 1.99.0 (5f94df478 2026-08-27)",
+  "optimizer": "wasm-opt version 132",
+  "target": "wasm32-unknown-unknown",
+  "build": {
+    "command": [
+      "cargo",
+      "+stable",
+      "build",
+      "-p",
+      "earth-sky-shared",
+      "--release",
+      "--locked",
+      "--offline",
+      "--target",
+      "wasm32-unknown-unknown"
+    ],
+    "rustflags": "-C target-feature=+atomics,+bulk-memory,+mutable-globals,+simd128 -C link-arg=--shared-memory -C link-arg=--import-memory -C link-arg=--max-memory=4194304 -C link-arg=-zstack-size=524288 -C link-arg=--export=__stack_pointer",
+    "optimize": [
+      "wasm-opt",
+      "-O3",
+      "--enable-threads",
+      "--enable-bulk-memory",
+      "--enable-mutable-globals",
+      "--enable-simd",
+      "--strip-debug"
+    ],
+    "warnings": [
+      "unstable feature specified for `-Ctarget-feature`: `atomics`"
+    ]
+  },
+  "memory": {
+    "shared": true,
+    "imported": true,
+    "initialPages": 64,
+    "maximumPages": 64,
+    "stackBytes": 524288,
+    "threadStackBytes": 65536,
+    "maximumThreads": 8,
+    "grows": false
+  },
+  "checks": {
+    "importsSharedMemory": true,
+    "minimumPages": 45,
+    "maximumPages": 64,
+    "importsOnlyMemoryAndMath": true,
+    "exportsStackPointer": true,
+    "stackPointerStart": 524288,
+    "noMemoryGrow": true,
+    "noThreadLocalStorage": true,
+    "noAllocator": true,
+    "atomicInstructions": 21,
+    "onceOnlyDataInitialisation": true
+  },
+  "exports": [
+    "__stack_pointer",
+    "sky_shared_abi_version",
+    "sky_shared_build",
+    "sky_shared_commit",
+    "sky_shared_fan_claimed",
+    "sky_shared_irradiance",
+    "sky_shared_layout",
+    "sky_shared_model",
+    "sky_shared_prepare",
+    "sky_shared_radiance"
+  ],
+  "imports": [
+    "env.memory",
+    "sky_math.cos",
+    "sky_math.exp",
+    "sky_math.log",
+    "sky_math.pow",
+    "sky_math.sin",
+    "sky_math.sqrt"
+  ],
+  "inputs": {
+    "Cargo.lock": "e35b646b9de591a7479996dde3d59d4fbfa34374c5f7c23feec9499e4b8568f5",
+    "Cargo.toml": "3fe6668d6cb2907c8ee5bb51465c00a0b9170f42dad8113f9debeaf464318dc7",
+    "crates/earth-sky-kernel/Cargo.toml": "8a22d1169965e5a434177a6548f1dcc0260eef2883f3e5263d4db658be375791",
+    "crates/earth-sky-kernel/src/lib.rs": "bae662c5a9496071fc34e8b57e5606819df7882bce62d3c7e95d4027576dcf68",
+    "crates/earth-sky-shared/Cargo.toml": "adee4a440ae7df5244522d3ceb1c3092290343795fd2f459b6fe6f828d7c159a",
+    "crates/earth-sky-shared/src/lib.rs": "91c98c19e0df25bc1222696b1ea0a94120c7448216f6c17179238ae161f33636",
+    "helper.js": "c8b84fa30738ec04e178df44272ab5446a3ce2d298bf2256742a3e9e05ff09cd",
+    "rust-toolchain.toml": "ef4d1f56bd8d2d2644df4c2c5786dc149046cd43048f4550420d77a8829f9e53",
+    "scripts/build-shared.mjs": "636f582ff057bd651724daa56efcd444ae82cb20a818de6d183c5b7b65ac70dd",
+    "sharedCore.js": "95833d5d02be4af05d74656b4ccbb541e20d4763fc32e63d729f610dc27df98a",
+    "threads.js": "10e5f30de6d4aa71fa50d1a05eeeaddb3388bfa94d7b9f0f75424b0d3c52c870",
+    "toolchain.lock.json": "6cab030b27c367cedc23c35d018862865854dbfa2fc808fc57d05a8ef938b59d"
+  },
+  "outputs": {
+    "shared/sky-shared.wasm": {
+      "sha256": "450d07cb08928f5e272a3261c256465abd1e744eb2bfbf4dcde21ee8c3cd6d5c",
+      "bytes": 16985
+    }
+  },
+  "threaded": true,
+  "functionality": "build receipt only; parity and concurrency evidence is recorded by scripts/check-sky-shared.mjs and tests/sky-shared.test.mjs",
+  "performance": "unmeasured",
+  "power": "unmeasured"
+}

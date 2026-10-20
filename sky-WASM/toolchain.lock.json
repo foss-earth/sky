@@ -1,0 +1,39 @@
+{
+  "schema": 1,
+  "rust": "1.99.0",
+  "cargo": "1.99.0",
+  "installedToolchainAlias": "stable",
+  "target": "wasm32-unknown-unknown",
+  "binaryen": 132,
+  "node": "26.9.0",
+  "abi": "bounded raw exports, version 1",
+  "singleTargetFeatures": [
+    "simd128"
+  ],
+  "maximumMemoryBytes": 268435456,
+  "maximumBinaryBytes": 262144,
+  "threaded": {
+    "crates": [
+      "earth-sky-shared"
+    ],
+    "targetFeatures": [
+      "atomics",
+      "bulk-memory",
+      "mutable-globals",
+      "simd128"
+    ],
+    "linkArguments": [
+      "--shared-memory",
+      "--import-memory",
+      "--export=__stack_pointer"
+    ],
+    "maximumMemoryBytes": 4194304,
+    "stackBytes": 524288,
+    "threadStackBytes": 65536,
+    "maximumThreads": 8,
+    "toolchainCaveat": "stable rustc warns that the atomics target feature is unstable; no nightly, rust-src/build-std or wasm-bindgen is used, and std is not linked (no_std, no allocator, no thread-local storage)",
+    "browserRequirement": "crossOriginIsolated (COOP same-origin + COEP require-corp or credentialless) for shared WebAssembly.Memory"
+  },
+  "wasmBindgen": null,
+  "qualification": "tables and worker evaluations checked bit for bit against the TypeScript sky (scripts/check-sky.mjs), and the shared-memory build at 1, 2, 4 and 8 threads (scripts/check-sky-shared.mjs); browser, performance and power qualification are separate"
+}

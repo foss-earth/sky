@@ -1,0 +1,60 @@
+{
+  "schema": 1,
+  "core": "sky",
+  "abiVersion": 1,
+  "rust": "rustc 1.99.0 (b940084d7 2026-09-28)",
+  "cargo": "cargo 1.99.0 (5f94df478 2026-08-27)",
+  "optimizer": "wasm-opt version 132",
+  "node": "26.9.0",
+  "target": "wasm32-unknown-unknown",
+  "build": {
+    "command": [
+      "cargo",
+      "+stable",
+      "build",
+      "-p",
+      "earth-sky",
+      "--release",
+      "--locked",
+      "--offline",
+      "--target",
+      "wasm32-unknown-unknown"
+    ],
+    "rustflags": "-C target-feature=+simd128 -C link-arg=--max-memory=268435456",
+    "optimize": [
+      "wasm-opt",
+      "-O3",
+      "--enable-simd",
+      "--strip-debug"
+    ]
+  },
+  "inputs": {
+    "Cargo.lock": "e35b646b9de591a7479996dde3d59d4fbfa34374c5f7c23feec9499e4b8568f5",
+    "Cargo.toml": "3fe6668d6cb2907c8ee5bb51465c00a0b9170f42dad8113f9debeaf464318dc7",
+    "core.js": "2cb6853ff56537feb327850fdb64858bd60a97d774543f4aa4ed4079afbb8a3a",
+    "crates/earth-sky-kernel/Cargo.toml": "8a22d1169965e5a434177a6548f1dcc0260eef2883f3e5263d4db658be375791",
+    "crates/earth-sky-kernel/src/lib.rs": "bae662c5a9496071fc34e8b57e5606819df7882bce62d3c7e95d4027576dcf68",
+    "crates/earth-sky/Cargo.toml": "667e7d927b9b19a9210b45905feee75fc6a834ea50cce596882a732f822ceca6",
+    "crates/earth-sky/src/lib.rs": "56c73d2506cbb6e1756376fc8a9a70e8ea96effedc2448139e304263489fe8ab",
+    "helper.d.ts": "49a09a601d30584a54144246355d8e8edd2df39dbc30fd6359096666fce9d994",
+    "helper.js": "c8b84fa30738ec04e178df44272ab5446a3ce2d298bf2256742a3e9e05ff09cd",
+    "index.d.ts": "4b401926e770487cad668ed498bb39af5e3eb796652135df44114f441c05ef17",
+    "index.js": "27a3fe947f61080f0b4429e65076e56da300dd33492aa790df1adb033936100f",
+    "rust-toolchain.toml": "ef4d1f56bd8d2d2644df4c2c5786dc149046cd43048f4550420d77a8829f9e53",
+    "scripts/build.mjs": "810dcff6bd1f59d14f64c407f983193ffcdc00db5f1408c263daa422c18aa772",
+    "shared.d.ts": "28937bef939e5e0a093a1d9075b8d497e994000e19023152c6716e91320e9a6a",
+    "sharedCore.js": "95833d5d02be4af05d74656b4ccbb541e20d4763fc32e63d729f610dc27df98a",
+    "threads.js": "10e5f30de6d4aa71fa50d1a05eeeaddb3388bfa94d7b9f0f75424b0d3c52c870",
+    "toolchain.lock.json": "6cab030b27c367cedc23c35d018862865854dbfa2fc808fc57d05a8ef938b59d"
+  },
+  "outputs": {
+    "single/sky.wasm": {
+      "sha256": "f789b0aa85b1e82fdb332afcf11d9c10c56649ad688d7c0cb6c10bbcc01f0135",
+      "bytes": 35972
+    }
+  },
+  "threaded": false,
+  "functionality": "build receipt only; parity evidence comes from this folder's checks",
+  "performance": "unmeasured",
+  "power": "unmeasured"
+}
