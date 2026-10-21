@@ -3,7 +3,7 @@
 // Every value here is checked against the module's own layout export.
 
 /** Control words, as Int32Array indices into the control block. */
-export const CONTROL = Object.freeze({ EPOCH: 0, OPEN: 1, ACTIVE: 2, STOP: 3, CLAIM: 4, ROWS_DONE: 5, ERROR: 6, READY: 8, ROWS_BY: 16, WORDS: 32 });
+export const CONTROL = Object.freeze({ EPOCH: 0, OPEN: 1, ACTIVE: 2, STOP: 3, CLAIM: 4, ROWS_DONE: 5, ERROR: 6, LANES: 7, READY: 8, ROWS_BY: 16, WORDS: 32 });
 /** Status codes: the module's, then the hosts'. */
 export const STATUS = Object.freeze({ OK: 0, INVALID: 1, NO_MODEL: 2, CAPACITY: 3, THREAD: 4, TRAP: 100, STARTUP: 101 });
 export const SHARED_ABI_VERSION = 1;

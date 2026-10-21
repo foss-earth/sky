@@ -120,6 +120,35 @@ function connectedPair(kernel: "typescript" | "threaded") {
 
 describe("sky worker protocol", () => {
   const timers = { set: (callback: () => void, delay: number) => setTimeout(callback, delay), clear: (handle: unknown) => clearTimeout(handle as ReturnType<typeof setTimeout>) };
+  it("cancels an obsolete queued generation without retiring the evaluator or starting a timeout", async () => {
+    const pair = connectedPair("typescript"), release = vi.fn();
+    let grant!: (lease: { lanes: number; release: typeof release }) => void;
+    const port = Object.assign(pair.port, { compute: { acquire: () => new Promise<{ lanes: number; release: typeof release }>(resolve => { grant = resolve; }) } });
+    const evaluator = createSkyWorkerEvaluator({ createWorker: () => port, kernel: "typescript", now: () => 0, timers });
+    const abort = new AbortController(), result = evaluator.evaluate(request(Date.UTC(2026, 9, 17), 300), { signal: abort.signal });
+    abort.abort(new Error("sky switched off")); await expect(result).rejects.toThrow("sky switched off");
+    expect(pair.terminated).not.toHaveBeenCalled(); expect(evaluator.status()).toMatchObject({ state: "idle", failure: null });
+    grant({ lanes: 1, release }); await Promise.resolve(); expect(release).toHaveBeenCalledWith("stale"); evaluator.dispose();
+  });
+
+  it("admits coordinator and helpers as one team, waits outside execution timeout, and accepts a smaller generation", async () => {
+    vi.useFakeTimers();
+    try {
+      const pair = connectedPair("threaded"), release = vi.fn();
+      let grant!: (lease: { lanes: number; release: typeof release }) => void;
+      const acquire = vi.fn(() => new Promise<{ lanes: number; release: typeof release }>(resolve => { grant = resolve; }));
+      const port = Object.assign(pair.port, { compute: { acquire } });
+      const evaluator = createSkyWorkerEvaluator({ createWorker: () => port, kernel: "threaded", now: () => 0, timers, firstTimeoutMs: 10,
+        createHelpers: () => ({ ports: [{ postMessage() {} }, { postMessage() {} }], terminate() {} }) });
+      const pending = evaluator.evaluate(request(Date.UTC(2026, 9, 17, 23, 30), 300));
+      expect(acquire.mock.calls[0]?.[0]).toMatchObject({ lanes: 3 });
+      await vi.advanceTimersByTimeAsync(100);
+      expect(evaluator.status().state).toBe("busy"); expect(pair.terminated).not.toHaveBeenCalled();
+      grant({ lanes: 1, release }); await pending;
+      expect(release).toHaveBeenCalledOnce(); expect(evaluator.status().jobs).toBe(1); evaluator.dispose();
+      expect(vi.getTimerCount()).toBe(0);
+    } finally { vi.useRealTimers(); }
+  });
 
   it("creates no worker until asked, and returns the page's values through structured clone", async () => {
     const pair = connectedPair("typescript");

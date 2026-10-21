@@ -48,6 +48,20 @@ function expected(job) {
 }
 const bitsOf = array => Buffer.from(array.buffer, array.byteOffset, array.byteLength);
 const assertSameBits = (actual, wanted, message) => assert.ok(bitsOf(actual).equals(bitsOf(wanted)), message);
+test("admitted widths change only between generations and preserve exact rows through shrink and recovery", async () => {
+  const { core, close } = startCore(["normal", "normal", "normal"]);
+  try {
+    const kernel = core.createAtmosphere(snapshot);
+    for (const lanes of [4, 1, 2, 1, 4]) {
+      core.setActiveThreads(lanes);
+      const job = batch(24, 64, { seed: lanes });
+      run(kernel, job); assertSameBits(job.out, expected(job));
+      assert.ok(core.status().lastBatch.rowsByThread.slice(lanes).every(rows => rows === 0), "no unadmitted helper computed a row");
+      if (lanes === 1) assert.equal(core.status().lastBatch.mode, "solo");
+    }
+    assert.throws(() => core.setActiveThreads(0)); assert.throws(() => core.setActiveThreads(9));
+  } finally { await close(); }
+});
 function assertRetired(core, kernel, reason) {
   assert.equal(core.status().actual, "retired");
   assert.equal(core.status().retiredReason, reason);

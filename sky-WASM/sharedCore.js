@@ -85,6 +85,7 @@ export function createSharedSkyCore(module, options = {}) {
     || layout.out + layout.maxNus * 24 > memory.buffer.byteLength) throw new Error("Shared sky layout does not match its host");
   const buffer = memory.buffer;
   const ctl = new Int32Array(buffer, layout.control, CONTROL.WORDS);
+  let activeThreads = 1 + helperLimit;
   const jobF64 = new Float64Array(buffer, layout.job, 2), jobU32 = new Uint32Array(buffer, layout.job + 16, 4);
   const rowF64 = new Float64Array(buffer, layout.rows, layout.maxRows * 2), rowU32 = new Uint32Array(buffer, layout.rows, layout.maxRows * 4);
   const nusView = new Float64Array(buffer, layout.nus, layout.maxNus), outView = new Float64Array(buffer, layout.out, layout.maxNus * 3);
@@ -141,10 +142,11 @@ export function createSharedSkyCore(module, options = {}) {
   function runRows(rows, total, steps) {
     const status = exports.sky_shared_prepare();
     if (status !== STATUS.OK) throw Object.assign(new RangeError(`Shared sky batch rejected: ${statusName(status)}`), { status });
-    const helpersReady = ready();
+    const helpersReady = Math.min(ready(), activeThreads - 1);
     const parallel = helpersReady > 0 && rows >= 2 && total * steps >= minParallelWork;
     const started = now();
     if (parallel) {
+      Atomics.store(ctl, CONTROL.LANES, activeThreads);
       epoch = (epoch + 1) | 0 || 1;
       Atomics.store(ctl, CONTROL.OPEN, epoch);
       Atomics.store(ctl, CONTROL.EPOCH, epoch);
@@ -193,6 +195,14 @@ export function createSharedSkyCore(module, options = {}) {
     actualTier: "threaded",
     validationStatus: "unvalidated",
     memory, module,
+    setActiveThreads(lanes) {
+      active();
+      if (!Number.isSafeInteger(lanes) || lanes < 1 || lanes > MAX_THREADS) throw new RangeError("Invalid admitted sky width");
+      // A late helper may enter/leave ACTIVE after closure, but cannot write
+      // rows unless its own epoch is still OPEN. No memory or slots are resized.
+      if (Atomics.load(ctl, CONTROL.OPEN) !== 0) throw new Error("Cannot resize an open sky generation");
+      activeThreads = Math.min(lanes, 1 + helperLimit);
+    },
     /** Hands the next helper slot its start message through `port`, or returns false when none is left. */
     connectHelper(port) {
       if (retired || connected >= helperLimit) return false;

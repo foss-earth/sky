@@ -1,6 +1,7 @@
 import type { AtmosphereParameters } from "./atmosphere.js";
 import type { AtmosphereNumericKernel, AtmosphereNumericPorts, AtmosphereNumericSnapshot, AtmosphereNumericStatus } from "./atmosphereNumericKernel.js";
 import { createSkyEvaluationState, type SkyEvaluationRequest, type SkyEvaluationResult } from "./skyEvaluation.js";
+import type { SkyComputeAdmission, SkyComputeLease } from "./computeAdmission.js";
 
 /**
  * Where the sky's evaluation runs, and with which numbers. `typescript`: the
@@ -48,6 +49,8 @@ export interface SkySharedThreadsStatus {
 
 /** The shared-memory core, already compiled and instantiated as thread 0 in this worker. */
 export interface SkyThreadedCore extends SkyNumericCore {
+  /** Change only between evaluations, never while a generation is open. */
+  setActiveThreads?(lanes: number): void;
   /** Starts the next helper through its port; false when no slot is left or the core is retired. */
   connectHelper(port: SkyHelperPort): boolean;
   status(): SkySharedThreadsStatus;
@@ -88,7 +91,7 @@ export interface SkyEvaluationBackend {
 }
 
 /** `helpers`: one port per helper worker the page started for a threaded request. */
-export type SkyEvaluationWorkerRequest = { type: "evaluate"; id: number; request: SkyEvaluationRequest } | { type: "helpers"; ports: SkyHelperPort[] };
+export type SkyEvaluationWorkerRequest = { type: "evaluate"; id: number; request: SkyEvaluationRequest; lanes?: number } | { type: "helpers"; ports: SkyHelperPort[] };
 export type SkyEvaluationWorkerReply =
   | { type: "result"; id: number; result: SkyEvaluationResult; backend: SkyEvaluationBackend }
   | { type: "error"; id: number; message: string; backend: SkyEvaluationBackend };
@@ -202,6 +205,11 @@ export function installSkyEvaluationWorker(options: SkyEvaluationWorkerHostOptio
     queue = queue.then(async () => {
       try {
         await start();
+        if (message.lanes !== undefined) {
+          if (!Number.isSafeInteger(message.lanes) || message.lanes < 1) throw new Error("Invalid sky admission width.");
+          if (threadedCore && !threadedCore.setActiveThreads && message.lanes < (options.threads ?? 1)) throw new Error("Shared sky core cannot honor admission width.");
+          threadedCore?.setActiveThreads?.(message.lanes);
+        }
         state ??= createSkyEvaluationState({ now: options.now, numericPorts });
         const { result, transfer } = state.evaluate(message.request);
         backend.jobs += 1;
@@ -232,6 +240,7 @@ function structuredCopy<T>(value: T): T {
 
 /** The page's handle on a sky worker. */
 export interface SkyEvaluationWorkerPort {
+  readonly compute?: SkyComputeAdmission;
   postMessage(message: SkyEvaluationWorkerRequest, transfer?: unknown[]): void;
   addEventListener(type: "message" | "error" | "messageerror", listener: (event: { data?: unknown; message?: string }) => void): void;
   terminate(): void;
@@ -253,7 +262,7 @@ export interface SkyEvaluatorStatus {
 
 /** Evaluates the sky away from the page; the runtime keeps at most one request outstanding. */
 export interface SkyEvaluator {
-  evaluate(request: SkyEvaluationRequest): Promise<SkyEvaluationResult>;
+  evaluate(request: SkyEvaluationRequest, ownership?: { signal?: AbortSignal; isCurrent?(): boolean }): Promise<SkyEvaluationResult>;
   status(): SkyEvaluatorStatus;
   dispose(): void;
 }
@@ -289,18 +298,17 @@ export function createSkyWorkerEvaluator(options: SkyWorkerEvaluatorOptions): Sk
     try { ended?.terminate(); } catch { /* Already gone. */ }
   };
   let nextId = 0;
-  let pending: { id: number; sent: number; starInputBytes: number; resolve(result: SkyEvaluationResult): void; reject(error: Error): void; timer: unknown } | null = null;
+  let pending: { id: number; sent: number; starInputBytes: number; resolve(result: SkyEvaluationResult): void; reject(error: unknown): void; timer: unknown; abort: AbortController; lease?: SkyComputeLease; signal?: AbortSignal; isCurrent?(): boolean; onAbort(): void } | null = null;
   const retire = (reason: string, nextState: "failed" | "disposed"): void => {
     if (status.state === "failed" || status.state === "disposed") return;
     status.state = nextState;
     if (nextState === "failed") status.failure = reason;
     const current = pending;
     pending = null;
-    if (current) { options.timers.clear(current.timer); current.reject(new Error(reason)); }
+    if (current) { current.signal?.removeEventListener("abort", current.onAbort); if (current.timer !== null) options.timers.clear(current.timer); current.abort.abort(); current.reject(new Error(reason)); }
     const retired = worker;
     worker = null;
-    retired?.terminate();
-    endHelpers();
+    try { retired?.terminate(); } finally { endHelpers(); current?.lease?.release("retired"); }
   };
   const onMessage = (event: { data?: unknown }): void => {
     const reply = event.data as SkyEvaluationWorkerReply;
@@ -308,6 +316,8 @@ export function createSkyWorkerEvaluator(options: SkyWorkerEvaluatorOptions): Sk
     const current = pending;
     pending = null;
     options.timers.clear(current.timer);
+    current.signal?.removeEventListener("abort", current.onAbort);
+    current.lease?.release(current.signal?.aborted || current.isCurrent?.() === false ? "stale" : reply.type === "error" ? "failed" : "useful");
     status.backend = reply.backend;
     // A sky that fell back, or whose shared core retired, leaves its helpers idle or stopped.
     if (helpers && reply.backend && reply.backend.state !== "starting" && reply.backend.threads?.actual !== "threaded") endHelpers();
@@ -325,7 +335,8 @@ export function createSkyWorkerEvaluator(options: SkyWorkerEvaluatorOptions): Sk
     current.resolve(result);
   };
   return {
-    evaluate(request) {
+    evaluate(request, ownership = {}) {
+      if (ownership.signal?.aborted) return Promise.reject(ownership.signal.reason);
       if (status.state === "failed" || status.state === "disposed") return Promise.reject(new Error(status.failure ?? "Sky evaluator disposed."));
       if (pending) return Promise.reject(new Error("Sky evaluator already has a request outstanding."));
       if (!worker) {
@@ -346,14 +357,32 @@ export function createSkyWorkerEvaluator(options: SkyWorkerEvaluatorOptions): Sk
       status.state = "busy";
       return new Promise<SkyEvaluationResult>((resolve, reject) => {
         const timeout = status.jobs === 0 ? options.firstTimeoutMs ?? 15000 : options.timeoutMs ?? 5000;
-        const timer = options.timers.set(() => retire("worker-timeout", "failed"), timeout);
         const stars = request.stars;
         const catalogue = stars && "generation" in stars ? stars.catalogue : null;
         const starInputBytes = catalogue ? catalogue.directions.byteLength + catalogue.vmag.byteLength + catalogue.colourIndex.byteLength
           : stars && "directions" in stars ? stars.directions.byteLength : 0;
-        pending = { id, sent: options.now(), starInputBytes, resolve, reject, timer };
-        try { worker!.postMessage({ type: "evaluate", id, request }); }
-        catch (error) { retire(`worker-post-failed: ${error instanceof Error ? error.message : String(error)}`, "failed"); }
+        const current = { id, sent: 0, starInputBytes, resolve, reject, timer: null as unknown, abort: new AbortController(), lease: undefined as SkyComputeLease | undefined,
+          ...ownership, onAbort() {
+            // Dispatched synchronous work keeps its team until the actual reply.
+            // A queued obsolete generation can settle without retiring workers.
+            if (current.timer !== null || pending !== current) return;
+            pending = null; status.state = "idle"; current.abort.abort(ownership.signal?.reason);
+            ownership.signal?.removeEventListener("abort", current.onAbort); reject(ownership.signal?.reason);
+          } };
+        pending = current;
+        ownership.signal?.addEventListener("abort", current.onAbort, { once: true });
+        const dispatch = (lease?: SkyComputeLease): void => {
+          if (pending !== current) { lease?.release("stale"); return; }
+          current.lease = lease; current.sent = options.now();
+          current.timer = options.timers.set(() => retire("worker-timeout", "failed"), timeout);
+          try { worker!.postMessage({ type: "evaluate", id, request, ...(lease ? { lanes: lease.lanes } : {}) }); }
+          catch (error) { retire(`worker-post-failed: ${error instanceof Error ? error.message : String(error)}`, "failed"); }
+        };
+        // Acquire the entire cooperating team at once; no coordinator permit
+        // is held while helpers wait. The core enforces this generation's width.
+        if (worker!.compute) void worker!.compute.acquire({ lanes: 1 + (helpers?.ports.length ?? 0), signal: current.abort.signal }).then(dispatch,
+          () => { if (pending === current) retire("compute-admission-ended", "disposed"); });
+        else dispatch();
       });
     },
     status: () => ({ ...status, backend: status.backend && { ...status.backend }, lastJob: status.lastJob && { ...status.lastJob }, totals: { ...status.totals } }),

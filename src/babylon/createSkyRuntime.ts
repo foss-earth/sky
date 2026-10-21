@@ -315,6 +315,7 @@ export function createSkyRuntime(options: SkyRuntimeOptions): SkyRuntime {
   let evaluatorFailure: string | null = null;
   let retiredStatus: SkyEvaluatorStatus | null = null;
   let evaluating = false;
+  let evaluationAbort: AbortController | null = null;
   let waiting: SkyEvaluationRequest | null = null;
   /** Counts turning off, so a result asked for before it is not shown after it. */
   let generation = 0;
@@ -604,6 +605,7 @@ export function createSkyRuntime(options: SkyRuntimeOptions): SkyRuntime {
     lastMoonLocal = null;
     cost.computations = 0;
     generation += 1;
+    evaluationAbort?.abort(new DOMException("Sky generation retired.", "AbortError"));
     waiting = null;
     backgroundSet = null;
     backgroundBefore = null;
@@ -1071,15 +1073,19 @@ export function createSkyRuntime(options: SkyRuntimeOptions): SkyRuntime {
     const used = evaluator;
     waiting = null;
     evaluating = true;
-    used.evaluate(request).then(result => {
+    const abort = new AbortController(); evaluationAbort = abort;
+    used.evaluate(request, { signal: abort.signal, isCurrent: () => !disposed && used === evaluator && sentIn === generation && model() !== "off" }).then(result => {
+      if (evaluationAbort === abort) evaluationAbort = null;
       evaluating = false;
       if (disposed || used !== evaluator) return;
       if (request.stars && "generation" in request.stars && result.stars?.generation === request.stars.generation) retainedStarGeneration = request.stars.generation;
       if (sentIn === generation && model() !== "off") applyEvaluation(request, result);
       sendEvaluation();
     }, (error: unknown) => {
+      if (evaluationAbort === abort) evaluationAbort = null;
       evaluating = false;
       if (disposed || used !== evaluator) return;
+      if (abort.signal.aborted) { sendEvaluation(); return; }
       // Retired: the page evaluates from the next frame, as without an evaluator.
       retiredStatus = used.status();
       evaluatorFailure = retiredStatus.failure ?? (error instanceof Error ? error.message : String(error));

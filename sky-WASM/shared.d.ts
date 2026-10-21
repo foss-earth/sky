@@ -31,6 +31,7 @@ export interface SharedHelperPort {
   start?(): void;
 }
 export interface SharedSkyCore {
+  setActiveThreads(lanes: number): void;
   readonly actualTier: "threaded";
   readonly validationStatus: "unvalidated";
   readonly memory: WebAssembly.Memory;

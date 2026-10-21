@@ -40,7 +40,7 @@ export function runSkySharedHelper(start, { onReady, beforeJoin, imports } = {})
     // the other.
     Atomics.add(ctl, CONTROL.ACTIVE, 1);
     let trapped = false;
-    if (Atomics.load(ctl, CONTROL.OPEN) === epoch) {
+    if (Atomics.load(ctl, CONTROL.OPEN) === epoch && thread < Atomics.load(ctl, CONTROL.LANES)) {
       exports.__stack_pointer.value = top;
       try { exports.sky_shared_fan_claimed(thread); }
       catch { trapped = true; Atomics.compareExchange(ctl, CONTROL.ERROR, 0, STATUS.TRAP); }
