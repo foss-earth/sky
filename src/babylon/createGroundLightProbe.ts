@@ -177,9 +177,12 @@ export function createGroundLightProbe(options: GroundLightProbeOptions): Ground
       camera.upVector.copyFrom(across);
       // Aimed far below: Babylon nudges a camera looking straight down by a millimetre, which a far aim makes no tilt.
       camera.setTarget(position.subtract(up.scale(PROBE_AIM_METERS)));
-      const list = rendered.renderList!;
-      list.length = 0;
+      // Babylon watches a render list's push: the first into an empty list marks
+      // every mesh in the scene for its lights, so each material prepares its
+      // shader again. A new list swapped in is not watched.
+      const list: AbstractMesh[] = [];
       for (const mesh of scene.meshes) if (mesh.isEnabled() && options.isSeen(mesh)) list.push(mesh);
+      rendered.renderList = list;
       pending = { settings, compensation, startedAt: clock() };
       rendered.resetRefreshCounter();
       return true;

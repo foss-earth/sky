@@ -95,6 +95,36 @@ describe("ground light probe", () => {
     probe.dispose();
     expect(scene.customRenderTargets).toHaveLength(0);
   });
+  it("asks again for the ground there is now without marking every mesh in the scene for its lights", async () => {
+    const engine = new NullEngine();
+    engines.push(engine);
+    const scene = new Scene(engine);
+    const ground = MeshBuilder.CreateGround("ground", { width: 10, height: 10 }, scene);
+    ground.metadata = { mapSurface: true };
+    const aircraft = MeshBuilder.CreateBox("aircraft", { size: 1 }, scene);
+    let complete: (pixels: ArrayBufferView) => void = () => {};
+    const probe = createGroundLightProbe({
+      scene,
+      clock: () => 0,
+      isSeen: mesh => Boolean(mesh.metadata?.mapSurface),
+      onReading: () => {},
+      readPixels: () => new Promise<ArrayBufferView>(resolve => { complete = resolve; }),
+    });
+    const ask = () => probe.request(Vector3.Zero(), Vector3.Up(), { sizePx: 2, fieldOfViewDeg: 120 }, 1);
+    const lightDirty = vi.spyOn(aircraft, "_markSubMeshesAsLightDirty");
+    expect(ask()).toBe(true);
+    const target = scene.customRenderTargets[0];
+    target.onAfterUnbindObservable.notifyObservers(target);
+    complete(new Uint8Array(16));
+    await Promise.resolve();
+    await Promise.resolve();
+    const tile = MeshBuilder.CreateGround("tile", { width: 10, height: 10 }, scene);
+    tile.metadata = { mapSurface: true };
+    expect(ask()).toBe(true);
+    expect([...target.renderList!]).toEqual([ground, tile]);
+    expect(lightDirty).not.toHaveBeenCalled();
+    probe.dispose();
+  });
   it("releases its target/camera once and ignores a readback completed after disposal", async () => {
     const engine = new NullEngine();engines.push(engine);const scene = new Scene(engine);const onReading = vi.fn();
     let complete: (pixels: ArrayBufferView) => void = () => {};
