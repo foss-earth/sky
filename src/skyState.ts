@@ -96,10 +96,45 @@ export function adaptEv100(meteredEv100: number, zenithEv100: number, adaptation
  */
 export function starEv100(sceneEv100: number, darkestEv100: number, altitudeMeters: number, fromMeters: number, toMeters: number): number {
   const dark = Math.min(sceneEv100, darkestEv100);
-  const share = toMeters > fromMeters
+  return sceneEv100 + heightShare(altitudeMeters, fromMeters, toMeters) * (dark - sceneEv100);
+}
+
+/**
+ * How far a change made between two heights has gone at a height: none below
+ * the lower, all of it above the upper, in a straight line between. Two equal
+ * heights make a step at that height.
+ */
+export function heightShare(altitudeMeters: number, fromMeters: number, toMeters: number): number {
+  return toMeters > fromMeters
     ? Math.min(1, Math.max(0, (altitudeMeters - fromMeters) / (toMeters - fromMeters)))
     : altitudeMeters >= toMeters ? 1 : 0;
-  return sceneEv100 + share * (dark - sceneEv100);
+}
+
+/**
+ * What the meter reads, as exposures at ISO 100, and what it would read with
+ * the Sun overhead, which adaptation starts from. Near the ground it reads the
+ * light at the viewpoint, which is the light on the scene. High above it, that
+ * is no longer so: the viewpoint stays in sunlight until the Sun is as far
+ * below the ground's horizon as the horizon dips, 20° at 400 km, long after the
+ * lamps below have come on. There the meter reads the light on level ground
+ * below instead, as one meters the subject rather than the camera. `groundShare`
+ * moves the reading between the two, in stops: 0 is the viewpoint's alone, 1 the
+ * ground's.
+ */
+export function meterEv100(
+  illumination: Pick<SkyIllumination, "meteredLux" | "zenithMeteredLux" | "groundIlluminance" | "zenithGroundLux">,
+  groundShare: number,
+): { meteredEv100: number; zenithEv100: number } {
+  const viewpoint = ev100ForIlluminance(illumination.meteredLux);
+  const viewpointZenith = ev100ForIlluminance(illumination.zenithMeteredLux);
+  if (!(groundShare > 0)) return { meteredEv100: viewpoint, zenithEv100: viewpointZenith };
+  const ground = ev100ForIlluminance(luminance(illumination.groundIlluminance));
+  const groundZenith = ev100ForIlluminance(illumination.zenithGroundLux);
+  if (groundShare >= 1) return { meteredEv100: ground, zenithEv100: groundZenith };
+  return {
+    meteredEv100: viewpoint + groundShare * (ground - viewpoint),
+    zenithEv100: viewpointZenith + groundShare * (groundZenith - viewpointZenith),
+  };
 }
 
 /** How far the horizon lies below the level seen from a height, degrees: none at the ground, 20° from 400 km. */
@@ -245,10 +280,12 @@ export interface SkyIllumination {
   groundIlluminance: Rgb;
   /** The luminance of ground of the atmosphere's albedo under that light, cd/m² in each band. */
   groundLuminance: Rgb;
-  /** What the exposure meter reads: surfaces facing the Sun and the Moon, plus the sky's light on a level one, lux. */
+  /** What the exposure meter reads at the viewpoint: surfaces facing the Sun and the Moon, plus the sky's light on a level one, lux. High above the ground it reads the ground below instead (`meterEv100`). */
   meteredLux: number;
   /** What the meter would read here with the Sun overhead: the light exposure adapts down from. */
   zenithMeteredLux: number;
+  /** The Sun's and the sky's light on level ground at sea level with the Sun overhead, lux: the same for a reading on the ground below. */
+  zenithGroundLux: number;
   /** The night sky's own luminance, added above the horizon, cd/m². */
   nightLuminance: number;
 }
@@ -313,6 +350,7 @@ export function computeSkyIllumination(atmosphere: Atmosphere, ephemeris: SolarE
   const zenithDirect = luminance(scratch);
   atmosphere.skyIrradiance(altitude, 1, scratch);
   const zenithMeteredLux = (zenithDirect + luminance(scratch)) * solarIlluminanceLux;
+  const zenithGroundLux = luminance(groundLightPerUnit(atmosphere, 1, scratch)) * solarIlluminanceLux;
   const reflect = atmosphere.parameters.groundAlbedo / Math.PI;
   return {
     utcMs: ephemeris.utcMs,
@@ -330,6 +368,7 @@ export function computeSkyIllumination(atmosphere: Atmosphere, ephemeris: SolarE
     groundLuminance: [groundIlluminance[0] * reflect, groundIlluminance[1] * reflect, groundIlluminance[2] * reflect],
     meteredLux: luminance(sunIlluminance) + luminance(skyIlluminance) + (moon ? luminance(moon.directIlluminance) : 0),
     zenithMeteredLux,
+    zenithGroundLux,
     nightLuminance: night,
   };
 }

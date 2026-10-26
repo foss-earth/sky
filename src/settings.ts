@@ -44,6 +44,13 @@ export const VIEWPOINT_SURFACE_LIGHTING_CHOICE = {
 
 export const SKY_PARAMETERS: readonly ParameterSpec[] = [
   {
+    id: "sky.clock.display", label: "Clock", kind: "choice", unit: "none",
+    choices: [{ id: "civil", label: "Civil" }, { id: "solar", label: "Solar" }],
+    default: "civil", defaultReason: "Read ordinary clock time in the place's time zone, including daylight saving time.",
+    description: "Civil uses this place's time zone. Solar reads a sundial at the place shown, with noon when the Sun is highest. Switching clocks keeps the same instant and lighting.",
+    home: { tab: TIME_TAB, section: "instant", level: "main" }, appliesLive: true, source: "src/panels/dateTimePanel.ts",
+  },
+  {
     id: "sky.time.mode",
     label: "Time",
     description: "Which instant the Sun is placed for: the device's clock, which moves the Sun as the day goes, or a set time, which never changes and so repeats a picture exactly. The Date and time tab's dials set it: Now follows the clock, and turning a dial or pressing a moment on it sets a time.",
@@ -75,7 +82,7 @@ export const SKY_PARAMETERS: readonly ParameterSpec[] = [
   {
     id: "sky.time.utcHours",
     label: "Time of day (UTC)",
-    description: "The hour of the set time in Coordinated Universal Time, to the second, which is the same instant everywhere. The Date and time tab's dials show it as the solar time a sundial at the place shown reads, which is this plus four minutes for each degree east and the equation of time.",
+    description: "The hour of the set time in Coordinated Universal Time, to the second, which is the same instant everywhere. The Date and time tab reads it in Civil or Solar time; changing that display does not change the instant.",
     unit: "h",
     kind: "number",
     bounds: () => ({ min: 0, max: 24 }),
@@ -647,6 +654,31 @@ export const SKY_PARAMETERS: readonly ParameterSpec[] = [
     visibleWhen: { id: "sky.exposure.mode", value: "metered" },
     appliesLive: true,
     source: SOURCE,
+  },
+  {
+    id: "sky.exposure.groundMeterAltitude",
+    label: "Meter the ground below from",
+    description: "Near the ground the meter reads the light falling at the viewpoint, which is the light on the scene. High above it the two part: the viewpoint stays in sunlight until the Sun is as far below the ground's horizon as the horizon dips, 20° at 400 km, long after the lamps below have come on, and an exposure for that sunlight shows the night below as black. Between these two heights the reading moves, in stops, from the light at the viewpoint, at the lower, to the light on level ground below it, at the upper, as one meters the subject rather than the camera. Two equal heights make a step at that height.",
+    unit: KILOMETRES,
+    kind: "range",
+    bounds: () => ({ min: 0, max: 200 }),
+    step: 1,
+    default: { min: 20, max: 100 },
+    defaultReason: "Below 20 km the horizon dips less than the 5° the Sun sinks before lamps come on, and an aircraft and its cockpit are lit as the viewpoint is, so a flight is metered as before. From 100 km, where space is taken to begin, the planet is a subject seen from afar.",
+    home: { tab: SKY_TAB, section: "exposure", level: "main" },
+    visibleWhen: { id: "sky.exposure.mode", value: "metered" },
+    appliesLive: true,
+    source: SOURCE,
+  },
+  {
+    id: "sky.exposure.lensFlare",
+    label: "Lens flare",
+    description: "A camera lens's glare and six-ray starburst around the visible Sun; Flare adds ghost reflections. Strength follows the Sun's light and exposure, and hidden parts of its disc contribute nothing. Off allocates no rendering resources. Available with the sky dome on WebGL 2 and WebGPU; off in XR. The Moon and lamps keep their existing point images.",
+    kind: "choice", unit: "none",
+    choices: [{ id: "off", label: "Off" }, { id: "glare", label: "Glare" }, { id: "flare", label: "Flare" }],
+    default: "off", defaultReason: "A lens artifact is optional; an ordinary view adds no glare passes or textures.",
+    home: { tab: SKY_TAB, section: "exposure", level: "main" }, appliesLive: true,
+    source: "src/babylon/createSunLensFlare.ts",
   },
   {
     id: "sky.exposure.ev100",

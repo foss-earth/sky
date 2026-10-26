@@ -6,7 +6,7 @@ import { lunarEphemeris, lunarPosition, moonIlluminanceLux, moonMagnitude } from
 import { solarEphemeris, solarPosition } from "@foss-earth/sky";
 import {
   adaptEv100, computeSkyIllumination, createSkyDomeGeometry, ev100ForIlluminance, fillSkyDome, GROUND_LIGHT_SAMPLES, GROUND_LIGHT_TABLE,
-  groundLightAt, groundLightTable, luminance, observerAt, PHOTOMETRY, starEv100, whiteLuminanceForEv100,
+  groundLightAt, groundLightTable, heightShare, luminance, meterEv100, observerAt, PHOTOMETRY, starEv100, whiteLuminanceForEv100,
 } from "@foss-earth/sky";
 import { STAR_RECORD_BYTES, STAR_RECORDS } from "@foss-earth/sky/catalogue";
 import { applyMatrix3, decodeStarCatalogue, precessionMatrix, starDirections, starIlluminanceLux, starPlaceDeg } from "@foss-earth/sky";
@@ -234,12 +234,21 @@ export function run(host: SkyModelHost): Record<string, unknown> {
 
   // The daytime sky by the viewpoint's height, the Sun 60° up, and the exposure the stars are shown at there.
   // Metering on the sky behind them, as a reflected-light meter does (ISO 2720, K = 12.5: EV = log2(8 L)), is what
-  // `sky.stars.daylightAltitude` stands in for with a straight line between its two heights.
+  // `sky.stars.daylightAltitude` stands in for with a straight line between its two heights. The scene is metered
+  // as the runtime meters it: at the viewpoint near the ground, on level ground below high above it
+  // (`sky.exposure.groundMeterAltitude`).
   const starHeights = defaultOf<{ min: number; max: number }>("sky.stars.daylightAltitude");
+  const meterHeights = defaultOf<{ min: number; max: number }>("sky.exposure.groundMeterAltitude");
   const overhead = (altitude: number, mu: number): number => {
     atmosphere.sunTransmittance(altitude, mu, reference);
     atmosphere.skyIrradiance(altitude, mu, out);
     return (luminance(reference) + luminance(out)) * PHOTOMETRY.solarIlluminanceLux;
+  };
+  // The Sun's and the sky's light on level ground at sea level, in each band.
+  const levelGround = (mu: number): Rgb => {
+    atmosphere.sunTransmittance(0, mu, reference);
+    atmosphere.groundSkyIrradiance(mu, out);
+    return [0, 1, 2].map(band => (reference[band] * Math.max(0, mu) + out[band]) * PHOTOMETRY.solarIlluminanceLux) as Rgb;
   };
   const skyMean = (altitude: number): number => {
     atmosphere.skyIrradiance(altitude, sinDeg(60), out);
@@ -249,12 +258,20 @@ export function run(host: SkyModelHost): Record<string, unknown> {
     const altitude = km * 1000;
     const sky = skyMean(altitude);
     const inRange = (ev: number): number => Math.min(DEFAULT_EXPOSURE.maxEv100, Math.max(DEFAULT_EXPOSURE.minEv100, ev));
-    const scene = inRange(adaptEv100(ev100ForIlluminance(overhead(altitude, sinDeg(60))), ev100ForIlluminance(overhead(altitude, 1)), DEFAULT_EXPOSURE.adaptation));
+    const meterGroundShare = heightShare(altitude, meterHeights.min * 1000, meterHeights.max * 1000);
+    const meter = meterEv100({
+      meteredLux: overhead(altitude, sinDeg(60)),
+      zenithMeteredLux: overhead(altitude, 1),
+      groundIlluminance: levelGround(sinDeg(60)),
+      zenithGroundLux: luminance(levelGround(1)),
+    }, meterGroundShare);
+    const scene = inRange(adaptEv100(meter.meteredEv100, meter.zenithEv100, DEFAULT_EXPOSURE.adaptation));
     const stars = starEv100(scene, DEFAULT_EXPOSURE.minEv100, altitude, starHeights.min * 1000, starHeights.max * 1000);
     return {
       km,
       skyMeanCdPerM2: round(sky),
       ofSeaLevel: round(sky / skyMean(0), 3),
+      meterGroundShare: round(meterGroundShare, 3),
       sceneEv100: round(scene, 4),
       meteredOnTheSkyEv100: round(Math.min(scene, Math.max(DEFAULT_EXPOSURE.minEv100, Math.log2(8 * sky))), 4),
       starEv100AtDefaults: round(stars, 4),
@@ -326,7 +343,7 @@ export function run(host: SkyModelHost): Record<string, unknown> {
   });
 
   return {
-    parameters, solar, light, moon, stars, starsByHeight: { heightsKm: starHeights, sunElevationDeg: 60, rows: starsByHeight },
+    parameters, solar, light, moon, stars, starsByHeight: { heightsKm: starHeights, meterGroundHeightsKm: meterHeights, sunElevationDeg: 60, rows: starsByHeight },
     accuracy: { transmittanceWorstErrorAgainstBruteForce: round(transmittanceWorst, 3), convergence, groundTable },
     cost, exposure: { defaults: DEFAULT_EXPOSURE, rows: exposure },
   };

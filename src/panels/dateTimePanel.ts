@@ -1,3 +1,4 @@
+import { placeClockZone } from "./placeClock.js";
 const pad = (value: number, width: number): string => String(Math.abs(value)).padStart(width, "0");
 import { parseUtcDate } from "../skyState.js";
 import { TIME_TAB } from "../settings.js";
@@ -7,7 +8,7 @@ import {
   type DayPart, type Season, type SolarDay,
 } from "../solarDay.js";
 import type { SkyDateTimeUiPorts, SkyPanelRefreshPort, SkyPanelStorageOptions, DialArc, DialKey, DialMark, DialTick } from "./ports.js";
-import { TIME_PARAMETER_IDS, isoDate, clockTime, fixedTimeValues, instantInUse, describePlace, deviceClockZone, utcOffsetText, zoneByLongitudeMinutes, solarMinuteMs, type ClockZone } from "../time.js";
+import { civilClockMs, utcForCivilClockMs, TIME_PARAMETER_IDS, isoDate, clockTime, fixedTimeValues, instantInUse, describePlace, utcOffsetText, type ClockZone } from "../time.js";
 export { TIME_PARAMETER_IDS, isoDate, clockTime, fixedTimeValues, instantInUse, describePlace, deviceClockZone, utcOffsetText, zoneByLongitudeMinutes, solarMinuteMs, type ClockZone } from "../time.js";
 
 export interface DateTimePanelOptions extends SkyPanelStorageOptions {
@@ -24,8 +25,8 @@ export interface DateTimePanelOptions extends SkyPanelStorageOptions {
   getPlace(): { latDeg: number; lonDeg: number } | null;
   /** Host UTC clock, ms since 1970. */
   now: () => number;
-  /** The time zone the device's clock keeps at an instant; the device's own, `deviceClockZone`, when omitted. */
-  deviceZone?: (utcMs: number) => ClockZone;
+  /** Geographic clock lookup. Defaults to an offline IANA lookup at getPlace(). */
+  placeZone?: (place: Place | null, utcMs: number) => ClockZone | null;
 }
 
 export interface DateTimePanelHandle {
@@ -95,8 +96,9 @@ interface View {
   place: Place;
   known: boolean;
   following: boolean;
-  /** The solar clock at the instant in use, to the minute, and its day's start. */
-  solarMs: number;
+  /** Clock fields in the selected display, to the minute, and the actual instant. */
+  clockMs: number;
+  utcMs: number;
   dayStart: number;
   year: number;
   yearStart: number;
@@ -131,8 +133,8 @@ function line(document: Document): HTMLParagraphElement {
 
 /**
  * The contents of the Date and time tab: the instant the Sun is placed for,
- * on two dials read as a sundial at the place shown would. The time dial is
- * one solar day, noon at the top and midnight at the bottom, its ring shaded
+ * on two dials in Civil or Solar time at the place shown. The time dial is
+ * one day, 12:00 at the top and 00:00 at the bottom, its ring shaded
  * by night, each twilight and day, with sunrise, noon, sunset and midnight
  * marked; the date dial is one year, the June solstice at the top, shaded by
  * how long the days are, with the equinoxes and solstices marked. Now follows
@@ -145,8 +147,9 @@ export function createDateTimePanel(options: DateTimePanelOptions): DateTimePane
   const settings = options.settings;
   const now = options.now;
   const { createParameterSection, createSectionsElement, appendHostSections, createHelpTooltip } = options.ui;
-  const deviceZone = options.deviceZone ?? deviceClockZone;
-  const { createDial, wrapTurn } = options.ui;
+  const placeZone = options.placeZone ?? placeClockZone;
+  const zoneAt = (utcMs: number): ClockZone => placeZone(options.getPlace(), utcMs) ?? { id: "UTC", name: "UTC (location unavailable)", offsetMinutes: 0 };
+  const { createDial, wrapTurn, createChoiceGroup, checkChoice } = options.ui;
   /** The time dial: midnight at the bottom and noon at the top, the morning on the left. */
   const timeTurn = (hours: number): number => wrapTurn(hours / 24 + 0.5);
   const hoursAtTurn = (turn: number): number => wrapTurn(turn - 0.5) * 24;
@@ -184,22 +187,30 @@ export function createDateTimePanel(options: DateTimePanelOptions): DateTimePane
     const known = options.getPlace();
     const place = known ?? { latDeg: 0, lonDeg: 0 };
     const { utcMs, following } = instantInUse(settings, now);
-    const solarMs = solarMinuteMs(utcMs, place.lonDeg);
-    const dayStart = solarDayStartMs(solarMs);
+    const clockMs = displayMinute(utcMs, place);
+    const dayStart = solarDayStartMs(clockMs);
     const year = new Date(dayStart).getUTCFullYear();
     const yearStart = yearStartMs(year);
     const daysInYear = Math.round((yearStartMs(year + 1) - yearStart) / DAY_MS);
-    return { place, known: known !== null, following, solarMs, dayStart, year, yearStart, daysInYear, day: solarDayAt(dayStart, place) };
+    return { place, known: known !== null, following, clockMs, utcMs, dayStart, year, yearStart, daysInYear, day: solarDayAt(solarDayStartMs(solarClockMs(utcMs, place.lonDeg)), place) };
   };
-  const timeOfDay = (current: View): number => current.solarMs - current.dayStart;
-  /** Sets the time to the instant a sundial at the place reads this. */
-  const setSolar = (solarMs: number, place: Place): void => {
-    if (disposed) return;
-    settings.setMany(fixedTimeValues(utcForSolarClockMs(solarMs, place.lonDeg)));
+  const timeOfDay = (current: View): number => current.clockMs - current.dayStart;
+  const solar = (): boolean => settings.get("sky.clock.display") === "solar";
+  const clockLabel = (): string => solar() ? "solar time" : "civil time";
+  function toClock(utcMs: number, place: Place): number { return solar() ? solarClockMs(utcMs, place.lonDeg) : civilClockMs(utcMs, zoneAt); }
+  function fromClock(clockMs: number, place: Place): number { return solar() ? utcForSolarClockMs(clockMs, place.lonDeg) : utcForCivilClockMs(clockMs, zoneAt); }
+  const displayMinute = (utcMs: number, place: Place): number => solar() ? wholeMinute(toClock(utcMs, place)) : Math.floor(toClock(utcMs, place) / TIME.minuteMs) * TIME.minuteMs;
+  const setClock = (clockMs: number, place: Place): void => {
+    if (!disposed) settings.setMany(fixedTimeValues(fromClock(clockMs, place)));
+  };
+  const solarHourOnClock = (hours: number, current: View): number => {
+    const instant = utcForSolarClockMs(current.day.startMs + hours * HOUR_MS, current.place.lonDeg);
+    const clock = toClock(instant, current.place);
+    return (clock - solarDayStartMs(clock)) / HOUR_MS;
   };
 
   // The time dial, and in its middle the time and Now.
-  const timeField = field(document, "Solar time, as hours and minutes", "foss-earth-dial__field--time");
+  const timeField = field(document, "Time, as hours and minutes", "foss-earth-dial__field--time");
   timeField.inputMode = "numeric";
   const nowButton = button(document, "Now", "Follow this device's clock, so the Sun moves as the day goes.");
   const timeMiddle = document.createElement("div");
@@ -207,30 +218,30 @@ export function createDateTimePanel(options: DateTimePanelOptions): DateTimePane
   timeMiddle.append(timeField, nowButton);
   let timeDrag: number | null = null;
   const timeDial = createDial({
-    ariaLabel: "Time of day, in solar time",
+    ariaLabel: "Time of day",
     valueMax: 24 * 60 - 1,
     centre: timeMiddle,
     onPress: turn => {
       const current = view();
-      setSolar(wholeMinute(current.dayStart + hoursAtTurn(turn) * HOUR_MS), current.place);
+      setClock(wholeMinute(current.dayStart + hoursAtTurn(turn) * HOUR_MS), current.place);
     },
-    onDragStart: () => { timeDrag = view().solarMs; },
+    onDragStart: () => { timeDrag = view().clockMs; },
     onDrag: travel => {
-      if (timeDrag !== null) setSolar(wholeMinute(timeDrag + travel * DAY_MS), view().place);
+      if (timeDrag !== null) setClock(wholeMinute(timeDrag + travel * DAY_MS), view().place);
     },
     onDragEnd: () => { timeDrag = null; },
     onKey: (key: DialKey) => {
       const current = view();
       const target = key === "start" ? current.dayStart
         : key === "end" ? current.dayStart + DAY_MS - TIME.minuteMs
-          : current.solarMs + { next: TIME.minuteMs, previous: -TIME.minuteMs, pageNext: HOUR_MS, pagePrevious: -HOUR_MS }[key];
-      setSolar(target, current.place);
+          : current.clockMs + { next: TIME.minuteMs, previous: -TIME.minuteMs, pageNext: HOUR_MS, pagePrevious: -HOUR_MS }[key];
+      setClock(target, current.place);
     },
     onMark: id => {
       const current = view();
       const sun = current.day.parts.sun;
       const hours = id === "noon" ? 12 : id === "midnight" ? 0 : id === "sunrise" ? sun.rise : id === "sunset" ? sun.set : null;
-      if (hours !== null) setSolar(wholeMinute(current.dayStart + hours * HOUR_MS), current.place);
+      if (hours !== null) setClock(wholeMinute(current.dayStart + solarHourOnClock(hours, current) * HOUR_MS), current.place);
     },
   });
 
@@ -248,32 +259,32 @@ export function createDateTimePanel(options: DateTimePanelOptions): DateTimePane
     onPress: turn => {
       const current = view();
       const day = Math.min(current.daysInYear - 1, Math.floor(yearFractionAtTurn(turn) * current.daysInYear));
-      setSolar(current.yearStart + day * DAY_MS + timeOfDay(current), current.place);
+      setClock(current.yearStart + day * DAY_MS + timeOfDay(current), current.place);
     },
     onDragStart: () => {
       const current = view();
       dateDrag = { dayStart: current.dayStart, time: timeOfDay(current) };
     },
     onDrag: travel => {
-      if (dateDrag) setSolar(dateDrag.dayStart + Math.round(travel * TIME.yearDays) * DAY_MS + dateDrag.time, view().place);
+      if (dateDrag) setClock(dateDrag.dayStart + Math.round(travel * TIME.yearDays) * DAY_MS + dateDrag.time, view().place);
     },
     onDragEnd: () => { dateDrag = null; },
     onKey: (key: DialKey) => {
       const current = view();
       const time = timeOfDay(current);
-      const target = key === "next" ? current.solarMs + DAY_MS
-        : key === "previous" ? current.solarMs - DAY_MS
+      const target = key === "next" ? current.clockMs + DAY_MS
+        : key === "previous" ? current.clockMs - DAY_MS
           : key === "pageNext" ? addMonths(current.dayStart, 1) + time
             : key === "pagePrevious" ? addMonths(current.dayStart, -1) + time
               : key === "start" ? current.yearStart + time
                 : current.yearStart + (current.daysInYear - 1) * DAY_MS + time;
-      setSolar(target, current.place);
+      setClock(target, current.place);
     },
     onMark: id => {
       const current = view();
       const instant = seasonsOf(current.year)[id as Season];
       if (instant === undefined) return;
-      setSolar(solarDayStartMs(solarClockMs(instant, current.place.lonDeg)) + timeOfDay(current), current.place);
+      setClock(solarDayStartMs(toClock(instant, current.place)) + timeOfDay(current), current.place);
     },
   });
 
@@ -290,13 +301,24 @@ export function createDateTimePanel(options: DateTimePanelOptions): DateTimePane
   const sunLine = line(document);
   const main = document.createElement("div");
   main.className = "foss-earth-date-time";
-  main.append(dials, instantLine, sunLine);
+  const clockGroup = createChoiceGroup("sky-clock-display", "Clock", [{ id:"civil", label:"Civil" }, { id:"solar", label:"Solar" }], document, {
+    help: "Civil uses the time zone at the place shown, including daylight saving time. Solar reads a sundial at the place shown. Switching keeps the same instant and lighting.",
+  });
+  const clockZone = document.createElement("span");
+  clockZone.className = "foss-earth-choice-group__status";
+  clockGroup.insertBefore(clockZone, clockGroup.lastElementChild);
+  const onClockChange = (event: Event): void => {
+    const input = event.target as HTMLInputElement;
+    if (input.matches('input[type="radio"]') && input.checked) settings.set("sky.clock.display", input.value);
+  };
+  clockGroup.addEventListener("change", onClockChange);
+  main.append(clockGroup, dials, instantLine, sunLine);
 
   const onNow = (): void => { if (!disposed) settings.set("sky.time.mode", "now"); };
   const onToday = (): void => {
     const current = view();
     if (current.following) return;
-    setSolar(solarDayStartMs(solarMinuteMs(now(), current.place.lonDeg)) + timeOfDay(current), current.place);
+    setClock(solarDayStartMs(toClock(now(), current.place)) + timeOfDay(current), current.place);
   };
   const showTime = (): void => { timeField.value = clockTime(timeOfDay(view()) / HOUR_MS); };
   const showDate = (): void => { dateField.value = isoDate(view().dayStart); };
@@ -307,7 +329,7 @@ export function createDateTimePanel(options: DateTimePanelOptions): DateTimePane
     const minutes = match?.[2] ? Number(match[2]) : 0;
     if (hours < 24 && minutes < 60) {
       const current = view();
-      setSolar(current.dayStart + hours * HOUR_MS + minutes * TIME.minuteMs, current.place);
+      setClock(current.dayStart + hours * HOUR_MS + minutes * TIME.minuteMs, current.place);
     }
     showTime();
   };
@@ -315,7 +337,7 @@ export function createDateTimePanel(options: DateTimePanelOptions): DateTimePane
     const day = parseUtcDate(dateField.value);
     if (day !== null) {
       const current = view();
-      setSolar(day + timeOfDay(current), current.place);
+      setClock(day + timeOfDay(current), current.place);
     }
     showDate();
   };
@@ -339,19 +361,20 @@ export function createDateTimePanel(options: DateTimePanelOptions): DateTimePane
   const timeMarks = (current: View): DialMark[] => {
     const sun = current.day.parts.sun;
     const marks: DialMark[] = [
-      { id: "noon", label: "Noon", turn: timeTurn(12), title: "Noon, 12:00 solar time: the Sun at its highest." },
-      { id: "midnight", label: "Midnight", turn: timeTurn(0), title: "Midnight, 00:00 solar time: the Sun at its lowest." },
+      { id: "noon", label: "Noon", turn: timeTurn(solarHourOnClock(12, current)), title: "Noon, 12:00 solar time: the Sun at its highest." },
+      { id: "midnight", label: "Midnight", turn: timeTurn(solarHourOnClock(0, current)), title: "Midnight, 00:00 solar time: the Sun at its lowest." },
     ];
-    if (sun.rise !== null) marks.push({ id: "sunrise", label: "Sunrise", turn: timeTurn(sun.rise), title: `Sunrise, ${clockTime(sun.rise)} solar time.` });
-    if (sun.set !== null) marks.push({ id: "sunset", label: "Sunset", turn: timeTurn(sun.set), title: `Sunset, ${clockTime(sun.set)} solar time.` });
+    if (sun.rise !== null) marks.push({ id: "sunrise", label: "Sunrise", turn: timeTurn(solarHourOnClock(sun.rise, current)), title: `Sunrise, ${clockTime(sun.rise)} solar time.` });
+    if (sun.set !== null) marks.push({ id: "sunset", label: "Sunset", turn: timeTurn(solarHourOnClock(sun.set, current)), title: `Sunset, ${clockTime(sun.set)} solar time.` });
     return marks;
   };
-  const dayArcs = (day: SolarDay): DialArc[] => {
+  const dayArcs = (current: View): DialArc[] => {
+    const day = current.day;
     const arcs: DialArc[] = [{ from: 0, to: 1, colour: SKY_COLOURS.night }];
     for (const [part, colour] of DAY_PARTS) {
       const { rise, set, always } = day.parts[part];
       if (always === "above") arcs.push({ from: 0, to: 1, colour });
-      else if (rise !== null && set !== null) arcs.push({ from: timeTurn(rise), to: timeTurn(rise) + wrapTurn(timeTurn(set) - timeTurn(rise)), colour });
+      else if (rise !== null && set !== null) arcs.push({ from: timeTurn(solarHourOnClock(rise, current)), to: timeTurn(solarHourOnClock(rise, current)) + wrapTurn(timeTurn(solarHourOnClock(set, current)) - timeTurn(solarHourOnClock(rise, current))), colour });
     }
     return arcs;
   };
@@ -378,9 +401,9 @@ export function createDateTimePanel(options: DateTimePanelOptions): DateTimePane
   function render(force = false): void {
     if (disposed) return;
     const current = view();
-    const nowSolar = solarMinuteMs(now(), current.place.lonDeg);
+    const nowSolar = displayMinute(now(), current.place);
     const locked = TIME_PARAMETER_IDS.some(id => settings.inspect(id).provenance === "host");
-    const key = [current.following, current.solarMs, nowSolar, current.place.latDeg.toFixed(3), current.place.lonDeg.toFixed(3), locked].join("|");
+    const key = [current.known, zoneAt(current.utcMs).id, solar(), current.following, current.clockMs, nowSolar, current.place.latDeg.toFixed(3), current.place.lonDeg.toFixed(3), locked].join("|");
     if (!force && key === shown) return;
     shown = key;
     const hours = timeOfDay(current) / HOUR_MS;
@@ -390,17 +413,17 @@ export function createDateTimePanel(options: DateTimePanelOptions): DateTimePane
     timeDial.render({
       turn: timeTurn(hours),
       valueNow: Math.round(hours * 60),
-      valueText: `${clockTime(hours)} solar time on ${date}`,
-      arcs: dayArcs(current.day),
+      valueText: `${clockTime(hours)} ${clockLabel()} on ${date}`,
+      arcs: dayArcs(current),
       ticks: HOUR_TICKS,
       marks: timeMarks(current),
-      ring: current.following ? null : { turn: timeTurn(nowHours), title: `Now: ${clockTime(nowHours)} solar time on ${isoDate(nowDay)}.` },
+      ring: current.following ? null : { turn: timeTurn(nowHours), title: `Now: ${clockTime(nowHours)} ${clockLabel()} on ${isoDate(nowDay)}.` },
       disabled: locked,
     });
     yearFace(current);
     const seasonsNow = seasonsOf(current.year);
     dateDial.render({
-      turn: dateTurn(yearFraction(current, current.solarMs)),
+      turn: dateTurn(yearFraction(current, current.clockMs)),
       valueNow: Math.round((current.dayStart - current.yearStart) / DAY_MS),
       valueText: date,
       arcs: yearArcs,
@@ -411,7 +434,7 @@ export function createDateTimePanel(options: DateTimePanelOptions): DateTimePane
         return {
           id: season,
           label: SEASON_NAMES[season][0],
-          turn: dateTurn(yearFraction(current, solarClockMs(instant, current.place.lonDeg))),
+          turn: dateTurn(yearFraction(current, toClock(instant, current.place))),
           title: `${SEASON_NAMES[season][1]}, ${isoDate(utc)} ${clockTime((utc - solarDayStartMs(utc)) / HOUR_MS)} UTC.`,
         };
       }),
@@ -425,29 +448,29 @@ export function createDateTimePanel(options: DateTimePanelOptions): DateTimePane
     nowButton.setAttribute("aria-pressed", String(current.following));
     todayButton.setAttribute("aria-pressed", String(current.following || nowDay === current.dayStart));
 
-    const utcMs = utcForSolarClockMs(current.solarMs, current.place.lonDeg);
-    const utcRounded = Math.round(utcMs / TIME.minuteMs) * TIME.minuteMs;
+    const utcMs = current.utcMs;
+    checkChoice(clockGroup, "sky-clock-display", solar() ? "solar" : "civil");
+    const zoneName = zoneAt(utcMs);
+    clockZone.textContent = solar() ? "At the place shown" : `${current.known ? zoneName.id ?? zoneName.name : "UTC · location unavailable"} · ${utcOffsetText(zoneName.offsetMinutes)}`;
+    timeField.setAttribute("aria-label", `Time, as hours and minutes, in ${clockLabel()}`);
+    const utcRounded = Math.floor(utcMs / TIME.minuteMs) * TIME.minuteMs;
     const utc = `${isoDate(utcRounded)} ${clockTime((utcRounded - solarDayStartMs(utcRounded)) / HOUR_MS)} UTC`;
-    const device = new Date(utcMs).toLocaleString(undefined, { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", timeZoneName: "short" });
-    // The dials show the solar time and date; the line gives the same instant by the clocks.
-    instantLine.textContent = `${current.following ? "Now" : "Set time"}: ${utc} · ${device} on this device`;
-    // Which zone each of those is in. The dials are in none: solar time is the place's own.
-    const zone = deviceZone(utcMs);
-    const kept = `${zone.name}, ${utcOffsetText(zone.offsetMinutes)}${zone.id ? ` (${zone.id})` : ""}`;
+    const local = new Date(utcMs).toLocaleString(undefined, { timeZone: zoneName.id ?? "UTC", year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", timeZoneName: "short" });
+    instantLine.textContent = `${current.following ? "Now" : "Set time"}: ${utc} · ${local} at the place shown`;
     zoneLine.textContent = current.known
-      ? `Time zones: this device's clock keeps ${kept}. The place shown is in ${utcOffsetText(zoneByLongitudeMinutes(current.place.lonDeg))} by its longitude alone, as zones run at sea; which civil time is kept there is not known to the app.`
-      : `Time zones: this device's clock keeps ${kept}. The place shown is not known yet.`;
+      ? `Civil time: ${zoneName.id ?? zoneName.name}, ${utcOffsetText(zoneName.offsetMinutes)} at the place shown, including daylight saving time. Geographic zone boundaries are approximate.`
+      : "The place shown is not known yet; Civil time temporarily reads UTC.";
     const sun = current.day.parts.sun;
     const daylight = sun.rise === null || sun.set === null ? 0 : Math.round((sun.set - sun.rise) * 60);
     sunLine.textContent = sun.always === "above" ? "The Sun stays above the horizon all day."
       : sun.always === "below" ? "The Sun stays below the horizon all day."
-        : `Sunrise ${clockTime(sun.rise!)} · sunset ${clockTime(sun.set!)} solar · ${Math.floor(daylight / 60)} h ${pad(daylight % 60, 2)} min daylight`;
+        : `Sunrise ${clockTime(solarHourOnClock(sun.rise!, current))} · sunset ${clockTime(solarHourOnClock(sun.set!, current))} ${solar() ? "solar" : "civil"} · ${Math.floor(daylight / 60)} h ${pad(daylight % 60, 2)} min daylight`;
     placeLine.textContent = current.known
       ? `Solar time is what a sundial reads at the place shown, ${describePlace(current.place)}: 12:00 with the Sun at its highest. Turning a dial on past midnight or the year's end carries on into the next day or year.`
       : "The place shown is not known yet, so the dials read a sundial at 0° N, 0° E.";
   }
 
-  const section = createParameterSection(settings, { document, tab: TIME_TAB, section: "instant", main, covers: TIME_PARAMETER_IDS, refresh: options.refresh, panelStorage: options.panelStorage });
+  const section = createParameterSection(settings, { document, tab: TIME_TAB, section: "instant", main, covers: [...TIME_PARAMETER_IDS, "sky.clock.display"], refresh: options.refresh, panelStorage: options.panelStorage });
   const sections = createSectionsElement([], { document, storage: options.panelStorage });
   const hostSections = appendHostSections(settings, TIME_TAB, sections, ["instant"], { document, refresh: options.refresh, panelStorage: options.panelStorage });
   const element = document.createElement("div");
@@ -456,7 +479,7 @@ export function createDateTimePanel(options: DateTimePanelOptions): DateTimePane
 
   render(true);
   const unsubscribe = settings.subscribe(changed => {
-    if (TIME_PARAMETER_IDS.some(id => changed.has(id))) render();
+    if (changed.has("sky.clock.display") || TIME_PARAMETER_IDS.some(id => changed.has(id))) render();
   });
   // The clock and the place shown move without the registry knowing: look again while the tab is on screen.
   const stopRefresh = options.refresh.subscribe(() => {
@@ -478,6 +501,7 @@ export function createDateTimePanel(options: DateTimePanelOptions): DateTimePane
       dateField.removeEventListener("keydown", onFieldKey);
       timeDial.destroy();
       dateDial.destroy();
+      clockGroup.removeEventListener("change", onClockChange);
       help.destroy();
       section.destroy();
       hostSections.destroy();

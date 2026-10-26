@@ -6,8 +6,8 @@ import { lunarEphemeris } from "./lunarPosition.js";
 import { solarEphemeris, solarPosition, spaRefractionDeg } from "./solarPosition.js";
 import {
   adaptEv100, computeSkyIllumination, createSkyDomeGeometry, drawnRefractionDeg, ev100ForIlluminance, ev100ForWhiteLuminance,
-  fillSkyDome, groundLightAt, groundLightSine, groundLightTable, horizonDipDeg, luminance, observerFromGeodetic, PHOTOMETRY, standardAtmosphere,
-  starEv100, whiteLuminanceForEv100, type SkyObserver,
+  fillSkyDome, groundLightAt, groundLightSine, groundLightTable, heightShare, horizonDipDeg, luminance, meterEv100, observerFromGeodetic, PHOTOMETRY,
+  standardAtmosphere, starEv100, whiteLuminanceForEv100, type SkyObserver,
 } from "./skyState.js";
 
 const atmosphere = createAtmosphere({ aerosolOpticalDepth: 0.1, groundAlbedo: 0.2 });
@@ -79,6 +79,15 @@ describe("exposure", () => {
     // Two equal heights make a step.
     expect(starEv100(15, 1, 99_999, 100_000, 100_000)).toBe(15);
     expect(starEv100(15, 1, 100_000, 100_000, 100_000)).toBe(1);
+  });
+
+  it("moves a change made with height in a straight line between two heights, or steps at one", () => {
+    expect(heightShare(10_000, 20_000, 100_000)).toBe(0);
+    expect(heightShare(60_000, 20_000, 100_000)).toBe(0.5);
+    expect(heightShare(400_000, 20_000, 100_000)).toBe(1);
+    expect(heightShare(-50, 0, 80_000)).toBe(0);
+    expect(heightShare(99_999, 100_000, 100_000)).toBe(0);
+    expect(heightShare(100_000, 100_000, 100_000)).toBe(1);
   });
 
   it("dips the horizon by the viewpoint's height", () => {
@@ -181,6 +190,30 @@ describe("sky illumination", () => {
     expect(luminance(high.skyIlluminance)).toBeLessThan(luminance(low.skyIlluminance));
     // The ground below is lit the same wherever the observer is above it.
     expect(luminance(high.groundIlluminance) / luminance(low.groundIlluminance)).toBeCloseTo(1, 2);
+  });
+
+  it("meters the ground below from high above, where the viewpoint is still in sunlight over the night", () => {
+    // 400 km up with the Sun 13° below the horizon of the ground beneath: the horizon dips 20° there, so the
+    // viewpoint is in full sunlight while the ground below is in nautical twilight, its lamps long since on.
+    const orbit = illuminationAt(-13, 400_000);
+    expect(orbit.meteredLux).toBeGreaterThan(100_000);
+    expect(luminance(orbit.groundIlluminance)).toBeLessThan(0.1);
+    const viewpoint = meterEv100(orbit, 0), ground = meterEv100(orbit, 1), half = meterEv100(orbit, 0.5);
+    expect(viewpoint).toEqual({ meteredEv100: ev100ForIlluminance(orbit.meteredLux), zenithEv100: ev100ForIlluminance(orbit.zenithMeteredLux) });
+    expect(ground).toEqual({ meteredEv100: ev100ForIlluminance(luminance(orbit.groundIlluminance)), zenithEv100: ev100ForIlluminance(orbit.zenithGroundLux) });
+    expect(half.meteredEv100).toBeCloseTo((viewpoint.meteredEv100 + ground.meteredEv100) / 2, 12);
+    expect(half.zenithEv100).toBeCloseTo((viewpoint.zenithEv100 + ground.zenithEv100) / 2, 12);
+    // An exposure for the viewpoint's sunlight is twenty stops too dark for the ground below; the ground's own,
+    // adapted as by default, is below the default range's dark end, EV 1, as on the ground at night.
+    expect(viewpoint.meteredEv100 - ground.meteredEv100).toBeGreaterThan(20);
+    expect(adaptEv100(viewpoint.meteredEv100, viewpoint.zenithEv100, 0.75)).toBeGreaterThan(15);
+    expect(adaptEv100(ground.meteredEv100, ground.zenithEv100, 0.75)).toBeLessThan(1);
+    // The Sun overhead the ground gives a clear day's light there, within a stop of the Sun's above the air.
+    expect(orbit.zenithGroundLux).toBeGreaterThan(100_000);
+    expect(Math.abs(ground.zenithEv100 - viewpoint.zenithEv100)).toBeLessThan(1);
+    // A share out of range is held to it.
+    expect(meterEv100(orbit, -1)).toEqual(viewpoint);
+    expect(meterEv100(orbit, 2)).toEqual(ground);
   });
 
   it("does not depend on which way the Earth's axes point: the same Sun over any meridian", () => {

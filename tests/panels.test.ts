@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createSettingsRegistry } from "@foss-earth/ui/settings";
-import { createHelpTooltip, createIconButton } from "@foss-earth/ui/browser";
+import { createHelpTooltip, createIconButton, createChoiceGroup, checkChoice } from "@foss-earth/ui/browser";
 import { SKY_PARAMETERS, SKY_SECTION_TITLES } from "../src/settings.js";
 import { fixedTimeValues, instantInUse } from "../src/time.js";
 import { DAY_MS, HOUR_MS, solarClockMs, solarDayStartMs } from "../src/solarDay.js";
@@ -21,7 +21,7 @@ function harness(page: Document = globalThis.document) {
     createSectionsElement(entries) { const element = document.createElement("div"); const ids = new Set<string>(); const append = (entry: typeof entries[number]) => { ids.add(entry.id); element.append(entry.element); }; for (const entry of entries) append(entry); return { element, append, has: id => ids.has(id), destroy: () => element.remove() }; },
     appendHostSections: () => ({ destroy: hostDestroy }),
     // UI's own: both build in the document they are given.
-    createHelpTooltip, createIconButton,
+    createHelpTooltip, createIconButton, createChoiceGroup, checkChoice,
     wrapTurn: turn => turn - Math.floor(turn),
     createDial(options) { const element = document.createElement("div"); element.className = "host-dial"; element.append(options.centre); const record = { options, frame: null as DialFrame | null, destroy: vi.fn() }; dials.push(record); return { element, render: frame => { record.frame = frame; }, isDragging: () => false, destroy: record.destroy }; },
   };
@@ -34,8 +34,9 @@ describe("Sky/Time injected panel lifecycle", () => {
     const h = harness(); const instant = Date.UTC(2026, 9, 7, 23, 59, 59, 700); const fixed = fixedTimeValues(instant); expect(fixed).toEqual({ "sky.time.mode": "fixed", "sky.time.date": "2026-10-08", "sky.time.utcHours": 0 }); h.settings.setMany(fixed); expect(instantInUse(h.settings, () => h.now.utcMs)).toEqual({ utcMs: Date.UTC(2026, 9, 8), following: false }); h.settings.set("sky.time.date", "invalid"); expect(instantInUse(h.settings, () => h.now.utcMs).utcMs).toBe(h.now.utcMs);
   });
   it("renders time through host dials, sets the existing home and advances from host clock refreshes", () => {
-    const h = harness(); const interval = vi.spyOn(window, "setInterval"); const panel = createDateTimePanel({ document, settings: h.settings, getPlace: () => h.place.value, now: () => h.now.utcMs, ui: h.ui, refresh: h.source, panelStorage: null, deviceZone: () => ({ name: "UTC", id: "UTC", offsetMinutes: 0 }) }); document.body.append(panel.element);
+    const h = harness(); const interval = vi.spyOn(window, "setInterval"); const panel = createDateTimePanel({ document, settings: h.settings, getPlace: () => h.place.value, now: () => h.now.utcMs, ui: h.ui, refresh: h.source, panelStorage: null, placeZone: () => ({ name: "UTC", id: "UTC", offsetMinutes: 0 }) }); document.body.append(panel.element);
     expect(h.dials).toHaveLength(2); expect(h.sectionOptions[0]).toMatchObject({ tab: "time", section: "instant", panelStorage: null }); expect(interval).not.toHaveBeenCalled(); interval.mockRestore();
+    h.settings.set("sky.clock.display", "solar");
     const initialText = h.dials[0].frame!.valueText; h.now.utcMs += HOUR_MS; h.refresh(); expect(h.dials[0].frame!.valueText).not.toBe(initialText);
     // Midnight is the bottom of the original noon-at-top dial.
     h.dials[0].options.onPress(0.5); expect(h.settings.get("sky.time.mode")).toBe("fixed"); const fixed = instantInUse(h.settings, () => h.now.utcMs).utcMs; const solar = solarClockMs(fixed, h.place.value.lonDeg); const sinceMidnight = solar - solarDayStartMs(solar);
@@ -46,11 +47,32 @@ describe("Sky/Time injected panel lifecycle", () => {
     const stopped = h.settings.get("sky.time.utcHours");h.dials[0].options.onPress(0);expect(h.settings.get("sky.time.utcHours")).toBe(stopped);
   });
   it("keeps the instant and sunrise lines short, with solar time and the zones behind ? after the dials", () => {
-    const h = harness(); const panel = createDateTimePanel({ document, settings: h.settings, getPlace: () => h.place.value, now: () => h.now.utcMs, ui: h.ui, refresh: h.source, panelStorage: null, deviceZone: () => ({ name: "Central Daylight Time", id: "America/Chicago", offsetMinutes: -300 }) }); document.body.append(panel.element);
+    const h = harness(); const panel = createDateTimePanel({ document, settings: h.settings, getPlace: () => h.place.value, now: () => h.now.utcMs, ui: h.ui, refresh: h.source, panelStorage: null, placeZone: () => ({ name: "Central Daylight Time", id: "America/Chicago", offsetMinutes: -300 }) }); document.body.append(panel.element);
     const help = panel.element.querySelector(".foss-earth-date-time__dials")!.lastElementChild!; expect(help.querySelector("button")!.getAttribute("aria-label")).toBe("Explain solar time and time zones");
-    expect(help.textContent).toContain("Solar time is what a sundial reads at the place shown"); expect(help.textContent).toContain("Time zones: this device's clock keeps Central Daylight Time, UTC−5 (America/Chicago).");
+    expect(help.textContent).toContain("Solar time is what a sundial reads at the place shown"); expect(help.textContent).toContain("Civil time: America/Chicago, UTC−5 at the place shown");
     const lines = Array.from(panel.element.querySelectorAll(".foss-earth-date-time > .foss-earth-choices__note"), line => line.textContent);
-    expect(lines).toHaveLength(2); expect(lines[0]).toMatch(/^Now: 2026-10-07 20:00 UTC · .+ on this device$/); expect(lines[1]).toMatch(/^Sunrise \d\d:\d\d · sunset \d\d:\d\d solar · \d+ h \d\d min daylight$/);
+    expect(lines).toHaveLength(2); expect(lines[0]).toMatch(/^Now: 2026-10-07 20:00 UTC · .+ at the place shown$/); expect(lines[1]).toMatch(/^Sunrise \d\d:\d\d · sunset \d\d:\d\d civil · \d+ h \d\d min daylight$/);
+    panel.destroy();
+  });
+  it("defaults to the aircraft's civil zone, switches without changing the instant, and follows location", () => {
+    const h = harness(); h.settings.setMany(fixedTimeValues(Date.parse("2026-10-25T23:10:58Z")));
+    const panel = createDateTimePanel({document, settings:h.settings, getPlace:()=>h.place.value, now:()=>h.now.utcMs, ui:h.ui, refresh:h.source});
+    document.body.append(panel.element);
+    const field = panel.element.querySelector<HTMLInputElement>('.foss-earth-dial__field--time')!;
+    expect(field.value).toBe("18:10");
+    expect(panel.element.textContent).toContain("America/Chicago");
+    const before = instantInUse(h.settings,()=>h.now.utcMs).utcMs;
+    panel.element.querySelector<HTMLInputElement>('input[value="solar"]')!.click();
+    expect(field.value).toBe("17:14");
+    expect(instantInUse(h.settings,()=>h.now.utcMs).utcMs).toBe(before);
+    panel.element.querySelector<HTMLInputElement>('input[value="civil"]')!.click();
+    h.place.value = {latDeg:35.68,lonDeg:139.76}; h.refresh();
+    expect(field.value).toBe("08:10");
+    expect(panel.element.querySelector<HTMLInputElement>('.foss-earth-dial__field--date')!.value).toBe("2026-10-26");
+    expect(panel.element.textContent).toContain("Asia/Tokyo");
+    expect(instantInUse(h.settings,()=>h.now.utcMs).utcMs).toBe(before);
+    field.value="09:30";field.dispatchEvent(new Event("change"));
+    expect(instantInUse(h.settings,()=>h.now.utcMs).utcMs).toBe(Date.parse("2026-10-26T00:30:00Z"));
     panel.destroy();
   });
   it("links Sky to the host Time tab and updates the Sun line from host place/time refreshes", () => {
@@ -66,9 +88,9 @@ describe("Sky/Time injected panel lifecycle", () => {
     const ambient = vi.spyOn(document, "createElement").mockImplementation(() => { throw new Error("Ambient document used"); });
     const options = { document: page, settings: h.settings, getPlace: () => h.place.value, now: () => h.now.utcMs, ui: h.ui, refresh: h.source, panelStorage: null };
     try {
-      const sky = createSkyPanel(options), time = createDateTimePanel({ ...options, deviceZone: () => ({ name: "UTC", id: "UTC", offsetMinutes: 0 }) });
+      const sky = createSkyPanel(options), time = createDateTimePanel({ ...options, placeZone: () => ({ name: "UTC", id: "UTC", offsetMinutes: 0 }) });
       expect(sky.element.ownerDocument).toBe(page); expect(time.element.ownerDocument).toBe(page);
-      expect(time.element.querySelectorAll("input").length).toBe(2);
+      expect(time.element.querySelectorAll("input").length).toBe(4);
       expect(h.sectionOptions.every(value => (value as { refresh: unknown }).refresh === h.source)).toBe(true);
       expect(h.sectionOptions.every(value => (value as { document: Document }).document === page)).toBe(true);
       sky.destroy(); time.destroy();

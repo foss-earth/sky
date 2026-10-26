@@ -54,10 +54,10 @@ for (const row of record.moon.nights) {
   console.log(`${row.name.padEnd(22)} ${String(row.sunElevationDeg).padStart(6)}° ${String(row.moonElevationDeg).padStart(7)}° ${String(row.moonLitFraction).padStart(5)} ${String(row.moonDirectLux).padStart(9)} ${String(row.moonlitSkyLux).padStart(15)} ${String(row.levelGroundLux).padStart(16)} ${String(row.meteredEv100).padStart(10)} ${String(row.adaptedEv100).padStart(9)} ${String(row.ev100AtDefaults).padStart(9)} ${String(row.groundOfReflectance03).padStart(12)}`);
 }
 console.log(`Stars: ${record.stars.count} in ${record.stars.packedBytes} bytes; ${Object.entries(record.stars.countToMagnitude).map(([magnitude, count]) => `${count} to ${magnitude}`).join(", ")}; brightest ${record.stars.brightest.lux} lx; all to 6.5, ${record.stars.allToMagnitude65AboveTheAirLux} lx.`);
-console.log(`Stars by day, the Sun ${record.starsByHeight.sunElevationDeg}° up, with their exposure moved between ${record.starsByHeight.heightsKm.min} and ${record.starsByHeight.heightsKm.max} km:`);
-console.log("Height    Sky cd/m²   of sea level   Scene EV   Metered on the sky   Stars' EV   Stars' white cd/m²");
+console.log(`Stars by day, the Sun ${record.starsByHeight.sunElevationDeg}° up, with their exposure moved between ${record.starsByHeight.heightsKm.min} and ${record.starsByHeight.heightsKm.max} km; the scene metered on the ground below from ${record.starsByHeight.meterGroundHeightsKm.min} to ${record.starsByHeight.meterGroundHeightsKm.max} km:`);
+console.log("Height    Sky cd/m²   of sea level   On the ground   Scene EV   Metered on the sky   Stars' EV   Stars' white cd/m²");
 for (const row of record.starsByHeight.rows) {
-  console.log(`${String(row.km).padStart(4)} km  ${String(row.skyMeanCdPerM2).padStart(10)}  ${String(row.ofSeaLevel).padStart(12)}  ${String(row.sceneEv100).padStart(9)}  ${String(row.meteredOnTheSkyEv100).padStart(18)}  ${String(row.starEv100AtDefaults).padStart(10)}  ${String(row.starWhiteCdPerM2).padStart(12)}`);
+  console.log(`${String(row.km).padStart(4)} km  ${String(row.skyMeanCdPerM2).padStart(10)}  ${String(row.ofSeaLevel).padStart(12)}  ${String(row.meterGroundShare).padStart(13)}  ${String(row.sceneEv100).padStart(9)}  ${String(row.meteredOnTheSkyEv100).padStart(18)}  ${String(row.starEv100AtDefaults).padStart(10)}  ${String(row.starWhiteCdPerM2).padStart(12)}`);
 }
 console.log(`Exposure at the defaults (adaptation ${record.exposure.defaults.adaptation}, EV ${record.exposure.defaults.minEv100} to ${record.exposure.defaults.maxEv100}):`);
 console.log("Sun elevation   Meter EV   Adapted   In range   Ground 0.3 / white   Sky / white   Ground, sky following the meter");

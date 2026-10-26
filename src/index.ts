@@ -148,6 +148,8 @@ export {
   GROUND_LIGHT_TABLE,
   PHOTOMETRY,
   adaptEv100,
+  heightShare,
+  meterEv100,
   computeSkyIllumination,
   groundLightAt,
   groundLightTable,

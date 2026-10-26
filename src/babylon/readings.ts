@@ -76,7 +76,21 @@ export function skyReadings(environment: () => SkyEnvironment | null, on: () => 
       const adapted = Math.abs(sky.adaptedEv100 - sky.meteredEv100) > 0.05 ? `; the meter reads EV ${sky.meteredEv100.toFixed(1)}, adapted to EV ${sky.adaptedEv100.toFixed(1)}` : "";
       const held = sky.exposureHeld === "dark" ? `, below the range, so the scene is left dark`
         : sky.exposureHeld === "bright" ? `, above the range, so the scene is left bright` : "";
-      return `EV ${sky.ev100.toFixed(1)} at ISO 100: white is ${formatLight(sky.whiteLuminance, "cd/m²")}, for ${formatLight(sky.illumination.meteredLux, "lx")} at the viewpoint${adapted || (held ? `; the meter reads EV ${sky.meteredEv100.toFixed(1)}` : "")}${held}`;
+      const share = sky.meterGroundShare;
+      const metered = share >= 1 ? `${formatLight(lux(sky.illumination.groundIlluminance), "lx")} on the ground below`
+        : share > 0 ? "the light at the viewpoint and on the ground below" : `${formatLight(sky.illumination.meteredLux, "lx")} at the viewpoint`;
+      return `EV ${sky.ev100.toFixed(1)} at ISO 100: white is ${formatLight(sky.whiteLuminance, "cd/m²")}, for ${metered}${adapted || (held ? `; the meter reads EV ${sky.meteredEv100.toFixed(1)}` : "")}${held}`;
+    }],
+    ["sky.exposure.groundMeterAltitude", () => {
+      const sky = environment();
+      if (!sky) return null;
+      const km = sky.illumination.observer.altitudeMeters / 1000;
+      const height = `${km >= 100 ? Math.round(km).toLocaleString("en-US") : Number(km.toPrecision(2))} km`;
+      const here = formatLight(sky.illumination.meteredLux, "lx"), ground = formatLight(lux(sky.illumination.groundIlluminance), "lx");
+      const share = sky.meterGroundShare;
+      return share >= 1 ? `At ${height} the meter reads the ground below, ${ground}, not the ${here} at the viewpoint`
+        : share > 0 ? `At ${height} the meter reads ${Math.round(share * 100)}% of the way, in stops, from the ${here} at the viewpoint to the ${ground} on the ground below`
+          : `At ${height} the meter reads the ${here} at the viewpoint`;
     }],
     ["sky.surface.lighting", () => {
       const factor = environment()?.surfaceFactor;

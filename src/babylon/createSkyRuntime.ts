@@ -22,8 +22,8 @@ import type { SkyEvaluator, SkyEvaluatorStatus } from "../skyEvaluationWorker.js
 import { lunarEphemeris, type LunarEphemeris } from "../lunarPosition.js";
 import { solarEphemeris, sunDirectionFrom, type SolarEphemeris } from "../solarPosition.js";
 import {
-  adaptEv100, computeSkyIllumination, createSkyDomeGeometry, ev100ForIlluminance, fillSkyDome, groundLightSine, groundLightTable, horizonDipDeg, luminance,
-  observerAt, parseUtcDate, PHOTOMETRY, starEv100, whiteLuminanceForEv100, type SkyDomeGeometry, type SkyIllumination, type SkyObserver,
+  adaptEv100, computeSkyIllumination, createSkyDomeGeometry, fillSkyDome, groundLightSine, groundLightTable, heightShare, horizonDipDeg, luminance,
+  meterEv100, observerAt, parseUtcDate, PHOTOMETRY, starEv100, whiteLuminanceForEv100, type SkyDomeGeometry, type SkyIllumination, type SkyObserver,
 } from "../skyState.js";
 import { illuminancePerRadiance, luminancePerRadiance, radianceAboveFloor, type NightLightPhotometry } from "../nightLights.js";
 import { blackBodyTint, celestialToEcefMatrix, loadStarCatalogue, starDirections, yearsFromJ2000, type StarCatalogue } from "../stars.js";
@@ -34,6 +34,8 @@ import { cleanupAll } from "./cleanup.js";
 import { DISPLAY_GAMMA, RAD_TO_DEG } from "../units.js";
 import type { SkyTerrainPorts, NightTilePorts, TerrainLighting, TerrainNightLighting } from "./ports.js";
 import type { SkyEcefToGeodetic } from "../skyState.js";
+import { createSunLensFlare } from "./createSunLensFlare.js";
+import { sunHorizonWeight, type LensFlareState } from "./lensFlareModel.js";
 
 /**
  * The sky in the scene: the rungs of docs/proposals/sky.md that are built.
@@ -116,9 +118,15 @@ export interface SkyEnvironment {
   direct: "sun" | "moon" | null;
   /** The exposure in use at ISO 100. */
   ev100: number;
-  /** What the meter reads for the light at the viewpoint, whether or not it is followed, and what adaptation makes of it. */
+  /** What the meter reads, whether or not it is followed, and what adaptation makes of it. */
   meteredEv100: number;
   adaptedEv100: number;
+  /**
+   * Where the meter reads: 0 the light at the viewpoint, 1 the light on level
+   * ground below, by the viewpoint's height through
+   * `sky.exposure.groundMeterAltitude`; between, a share of the way in stops.
+   */
+  meterGroundShare: number;
   /** Set when metering stopped at an end of its range: the scene is darker, or brighter, than the meter would make it. */
   exposureHeld: "dark" | "bright" | null;
   /**
@@ -141,6 +149,8 @@ export interface SkyEnvironment {
   starCatalogue: "not needed" | "loading" | "loaded" | null;
   /** The night lights, or null while they are off or the imagery is not lit. */
   nightLights: SkyNightLights | null;
+  /** Current lens visibility, including asynchronous GPU readback readiness. */
+  lensFlare: LensFlareState;
   cost: SkyCost;
 }
 
@@ -237,11 +247,11 @@ const EVALUATED_IDS = [
   "sky.stars.atmosphere",
 ] as const;
 const PRESENTED_IDS = [
-  "sky.exposure.mode", "sky.exposure.meterRange", "sky.exposure.ev100", "sky.exposure.adaptation", "sky.surface.lighting",
+  "sky.exposure.mode", "sky.exposure.meterRange", "sky.exposure.ev100", "sky.exposure.adaptation", "sky.exposure.groundMeterAltitude", "sky.surface.lighting",
   "sky.surface.albedoScale", "renderer.exposureEV", "sky.stars.mode", "sky.stars.limitingMagnitude", "sky.stars.sizePx",
   "sky.stars.daylightAltitude", "sky.groundLight.mode", "sky.nightLights.mode", "sky.nightLights.colourTemperature",
   "sky.nightLights.floor", "sky.nightLights.radiancePerEmittance", "sky.nightLights.groundReflectance",
-  "sky.nightLights.switchIlluminance",
+  "sky.nightLights.switchIlluminance", "sky.exposure.lensFlare",
 ] as const;
 /** Settings the night lights' tiles follow at the next frame: which are downloaded, kept and shown. */
 const NIGHT_LOADING_IDS = [
@@ -293,6 +303,8 @@ export function createSkyRuntime(options: SkyRuntimeOptions): SkyRuntime {
 
   const listeners = new Set<(environment: SkyEnvironment | null) => void>();
   let environment: SkyEnvironment | null = null;
+  let lensFlare: ReturnType<typeof createSunLensFlare> | null = null;
+  const offFlare: LensFlareState = { mode: "off", status: "ready", sources: [], settled: true };
   let lighting = false;
   let evaluate = true;
   let present = false;
@@ -516,6 +528,35 @@ export function createSkyRuntime(options: SkyRuntimeOptions): SkyRuntime {
     previous?.dispose();
   }
 
+  function disposeLensFlare(): void {
+    const previous = lensFlare;
+    lensFlare = null;
+    previous?.dispose();
+  }
+
+  function updateLensFlare(kind: SkyModel): void {
+    const mode = settings.get("sky.exposure.lensFlare");
+    if (kind !== "dome" || !illumination || !environment || (mode !== "glare" && mode !== "flare")) {
+      disposeLensFlare();
+      if (environment) environment.lensFlare = offFlare;
+      return;
+    }
+    const engine = scene.getEngine();
+    if (!engine.isWebGPU && ("webGLVersion" in engine && Number(engine.webGLVersion) < 2)) {
+      environment.lensFlare = { mode, status: "unsupported", settled: true, sources: [], reason: "Lens flare needs WebGL 2 or WebGPU." };
+      return;
+    }
+    lensFlare ??= createSunLensFlare({ scene, requestRender: options.requestRender, clock, timers });
+    const horizonWeight = sunHorizonWeight(illumination.observer.altitudeMeters, Math.sin(illumination.sunElevationDeg / RAD_TO_DEG));
+    lensFlare.update({
+      mode, direction: toScene(...illumination.sunDirection), up: toScene(...illumination.observer.up),
+      horizonDot: -Math.sin(horizonDipDeg(illumination.observer.altitudeMeters) / RAD_TO_DEG),
+      illuminance: illumination.sunIlluminance.map(e => horizonWeight > 0 ? e / horizonWeight : 0) as Rgb,
+      white: environment.whiteLuminance / 2 ** number("renderer.exposureEV"),
+    });
+    environment.lensFlare = lensFlare.getState();
+  }
+
   /**
    * The sine of the Sun's height at or below which lamps are on: where the
    * table, as the terrain's shader reads it, puts their switch's daylight on
@@ -618,6 +659,7 @@ export function createSkyRuntime(options: SkyRuntimeOptions): SkyRuntime {
       disposeStars,
       disposeProbe,
       disposeNightLights,
+      disposeLensFlare,
       () => {
         if (ownedBackground && scene.clearColor === ownedBackground && previousBackground) scene.clearColor = previousBackground;
       },
@@ -652,6 +694,12 @@ export function createSkyRuntime(options: SkyRuntimeOptions): SkyRuntime {
     if (!backgroundSet || scene.clearColor !== backgroundSet) backgroundBefore = scene.clearColor;
     backgroundSet = new Color4(encode(backgroundLinear[0] * compensation), encode(backgroundLinear[1] * compensation), encode(backgroundLinear[2] * compensation), 1);
     scene.clearColor = backgroundSet;
+  }
+
+  /** How much of the meter's reading is the ground's below, by the viewpoint's height: `sky.exposure.groundMeterAltitude`. */
+  function groundMeterShare(altitudeMeters: number): number {
+    const heights = settings.get("sky.exposure.groundMeterAltitude");
+    return isNumberRange(heights) ? heightShare(altitudeMeters, heights.min * 1000, heights.max * 1000) : 0;
   }
 
   /**
@@ -709,8 +757,9 @@ export function createSkyRuntime(options: SkyRuntimeOptions): SkyRuntime {
   function show(kind: Exclude<SkyModel, "off">): void {
     const state = illumination;
     if (!state || !directLight || !skyLight) return;
-    const meteredEv100 = ev100ForIlluminance(state.meteredLux);
-    const { ev100, exposureHeld, adaptedEv100 } = exposure(meteredEv100, ev100ForIlluminance(state.zenithMeteredLux));
+    const meterGroundShare = groundMeterShare(state.observer.altitudeMeters);
+    const { meteredEv100, zenithEv100 } = meterEv100(state, meterGroundShare);
+    const { ev100, exposureHeld, adaptedEv100 } = exposure(meteredEv100, zenithEv100);
     const whiteLuminance = whiteLuminanceForEv100(ev100);
     const scale = 1 / whiteLuminance;
 
@@ -808,6 +857,7 @@ export function createSkyRuntime(options: SkyRuntimeOptions): SkyRuntime {
       ev100,
       meteredEv100,
       adaptedEv100,
+      meterGroundShare,
       exposureHeld,
       whiteLuminance,
       surfaceFactor,
@@ -816,6 +866,7 @@ export function createSkyRuntime(options: SkyRuntimeOptions): SkyRuntime {
       starEv100: starsEv100,
       starCatalogue: catalogueState,
       nightLights: night,
+      lensFlare: lensFlare?.getState() ?? offFlare,
       cost: { ...cost },
     };
     for (const listener of [...listeners]) listener(environment);
@@ -845,11 +896,13 @@ export function createSkyRuntime(options: SkyRuntimeOptions): SkyRuntime {
         vmag: catalogue.vmag.slice(0, count), colourIndex: catalogue.colourIndex.slice(0, count) };
     }
     const meterRange = settings.get("sky.exposure.meterRange"), daylightAltitude = settings.get("sky.stars.daylightAltitude");
+    const groundMeterAltitude = settings.get("sky.exposure.groundMeterAltitude");
     return { generation: starInputs.generation, toEcef: celestialToEcefMatrix(utcMs),
       catalogue: retainedStarGeneration === starInputs.generation ? undefined : { directions: starInputs.directions, vmag: starInputs.vmag,
         colourIndex: starInputs.colourIndex, solarIlluminanceAt1AuLux: PHOTOMETRY.solarIlluminanceLux },
       presentation: { mode: settings.get("sky.exposure.mode") === "fixed" ? "fixed" : "metered", ev100: number("sky.exposure.ev100"), adaptation: number("sky.exposure.adaptation"),
         meterRange: isNumberRange(meterRange) ? { ...meterRange } : null, daylightAltitude: isNumberRange(daylightAltitude) ? { ...daylightAltitude } : null,
+        groundMeterAltitude: isNumberRange(groundMeterAltitude) ? { ...groundMeterAltitude } : null,
         sizePx: number("sky.stars.sizePx"), pixelAngle: pixelAngle(), imageMean: starImageMean() } };
   }
 
@@ -1062,6 +1115,7 @@ export function createSkyRuntime(options: SkyRuntimeOptions): SkyRuntime {
       options.onLightingChange(true);
     }
     measureGroundLight();
+    updateLensFlare(kind);
     scheduleClock();
   }
 
@@ -1152,7 +1206,7 @@ export function createSkyRuntime(options: SkyRuntimeOptions): SkyRuntime {
 
   return {
     update,
-    getEnvironment: () => environment,
+    getEnvironment: () => environment && ({ ...environment, lensFlare: lensFlare?.getState() ?? environment.lensFlare }),
     subscribe(listener) {
       if (disposed) return () => undefined;
       listeners.add(listener);

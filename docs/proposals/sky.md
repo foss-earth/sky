@@ -57,6 +57,29 @@ the user's `sky.exposure.meterRange`; outside it the reading shows where the met
 is and that the scene is left darker or brighter. Fixed mode holds
 `sky.exposure.ev100` for comparisons.
 
+**High above the ground the meter reads the ground below.** Near the ground the
+light at the viewpoint is the light on the scene. Far above it, it is not: the
+viewpoint stays in sunlight until the Sun is as far below the ground's horizon as
+the horizon dips, 20° at 400 km, long after the lamps below have come on at 5°
+([Night lights](#night-lights)). Metered at the viewpoint, the night side was shown
+at full sunlight's exposure, EV 15.7, where the brightest lit ground is a
+hundred-thousandth of white, and its lamps showed only once the viewpoint itself
+had passed into the Earth's shadow. So between the two heights of
+`sky.exposure.groundMeterAltitude` the reading moves, in stops, from the light at
+the viewpoint to the Sun's and the sky's light on level ground at sea level directly
+below it, as one meters the subject rather than the camera, and the overhead
+reading that adaptation starts from moves with it (`meterEv100` in
+[skyState.ts](../../src/skyState.ts)). The defaults are 20 and 100 km. Below 20 km
+the horizon dips less than those 5°, and an aircraft and its cockpit are lit as the
+viewpoint is, so a flight is metered as it was; from 100 km, where space is taken
+to begin, the planet is a subject seen from afar. Over the day side the two
+readings agree within a stop: with the Sun 60° up the scene is shown at EV 15.4 from
+orbit, against 15.7 metered at the viewpoint. Over the night side the ground's
+reading takes exposure to the range's dark end, EV 1, where the lamps show. It is
+the ground under the viewpoint, not the ground in view: looking from over the day
+side across the terminator, the night beyond is shown at the day's exposure, as a
+camera's meter would show it.
+
 **Exposure follows the light part of the way down.** A camera's meter shows a scene
 at one brightness whatever lights it. Dusk then looks as bright as noon, and with
 the Sun just under the horizon the meter reads the sky alone and shows it at two
@@ -408,13 +431,14 @@ a white of 9.6 L. With the Sun 60° up:
 | --- | --- | --- | --- | --- | --- |
 | 0 km | 5,720 cd/m² | 1 | EV 15.6 | EV 15.5 | EV 15.6 |
 | 20 km | 245 cd/m² | 0.043 | EV 15.7 | EV 10.9 | EV 12.0 |
-| 40 km | 20.7 cd/m² | 0.0036 | EV 15.7 | EV 7.4 | EV 8.4 |
-| 60 km | 1.63 cd/m² | 0.00029 | EV 15.7 | EV 3.7 | EV 4.7 |
-| 80 km | 0.118 cd/m² | 0.000021 | EV 15.7 | EV 1.0, the range's floor | EV 1.0 |
-| 400 km | The night sky's own | | EV 15.7 | EV 1.0 | EV 1.0 |
+| 40 km | 20.7 cd/m² | 0.0036 | EV 15.6 | EV 7.4 | EV 8.3 |
+| 60 km | 1.63 cd/m² | 0.00029 | EV 15.6 | EV 3.7 | EV 4.6 |
+| 80 km | 0.118 cd/m² | 0.000021 | EV 15.5 | EV 1.0, the range's floor | EV 1.0 |
+| 400 km | The night sky's own | | EV 15.4 | EV 1.0 | EV 1.0 |
 
-The straight line between the two heights is within a stop of the meter's reading
-all of the way. On a view 46° high and 800 px tall, with stars 3 px across, Sirius
+The scene's exposure eases by a third of a stop above 20 km, where the meter moves
+to the ground below ([One scale](#one-scale)). The straight line between the two
+heights is within a stop of the meter's reading all of the way. On a view 46° high and 800 px tall, with stars 3 px across, Sirius
 shows from about 20 km, stars of the second magnitude from about 45 km, and the
 faintest drawn from about 80 km. No aircraft flies there, so a flight's day has no
 stars; a view of the planet from space has all of them. The heights are the
@@ -721,7 +745,137 @@ shows the sky again.
 **Exposure.** At night the meter holds at its range's dark end, EV 1, where white is
 2.4 cd/m². Imagery at full white under a clipped centre's 1.8 lx then shows at about
 a third of white, and the satellite's picture of that centre at 4% of white, about a
-fifth once encoded for the display. The meter does not read the lamps' light.
+fifth once encoded for the display. The meter does not read the lamps' light. From
+orbit it reads the ground below, so the night side is shown at that exposure
+whether or not the viewpoint is still in sunlight ([One scale](#one-scale)).
+
+## Camera lens flare
+
+`sky.exposure.lensFlare` is one optional control in **Sky → Exposure and
+display**, shared by Earth and 0SFS flight: **Off** (the default), **Glare**
+(halo and six rays), or **Flare** (also four lens reflections). Addresses use
+`set.sky.exposure.lensFlare=flare`. It requires the Dome model and WebGL 2 or
+WebGPU. It is off in XR: a screen-space nominal camera lens is not an optical
+model of either headset eye. The Moon and lamps retain their existing images;
+they do not acquire these Sun ghosts.
+
+### Light and exposure
+
+The source is the atmosphere model's RGB solar illuminance at the observer,
+not a brightness chosen for a scene. With solar solid angle
+`Ω = 2π(1 − cos(0.0046542))` sr and effective white
+`W = whiteLuminance / 2^renderer.exposureEV`, the excess source energy is
+`E_excess = E × max(0, 1 − ΩW / luminance(E))`. Each lens image receives its
+fixed share of `E_excess / W`, times the visible disc fraction, distributed
+over its angular image area by a kernel with measured unit integral. Below
+white there is no flare. Lowering fixed EV by one stop, or adding one stop of
+display compensation, increases it; metered exposure follows the same rule.
+At EV 12 the unattenuated Sun is 18.60 stops over white. Air dims and reddens
+both glare and ghosts before their fixed coating tints are applied.
+
+`Atmosphere.sunTransmittance` already includes a smooth finite-disc horizon
+weight. The compositor removes that weight using the atmosphere's identical
+smoothstep and atmosphere-entry calculation, then counts the visible disc
+once through the visibility mask. This prevents a half-hidden Sun being
+attenuated twice. Atmospheric transmission is still the sky model's value at
+the disc centre; it does not resolve the different air columns across the rim.
+
+### One nominal lens
+
+These constants describe a single illustrative coated six-blade lens, rather
+than a calibrated manufactured lens. They are fixed for all scenes. Geometric
+ghost placement and aperture rays are approximations, without lens ray tracing,
+chromatic diffraction, sensor blooming, dirt or animation. The light scale is
+physical; the nominal lens's point-spread function is an explicit assumption.
+
+| Constant | Value and reasoning |
+| --- | --- |
+| Scattered glare energy | 0.001 of excess illuminance: an assumed 0.1% wide-angle scatter budget, leaving almost all source energy in its original disc |
+| Glare image | Half-angle 9°, with core Gaussian σ 0.025, halo width 0.12 and relative peak 0.04, in image half-sides; taper `(1−r²)²` to zero at the edge |
+| Aperture | Six rays, three lines 60° apart; transverse Gaussian σ 0.008, longitudinal width 0.15, relative peak 0.12 per line; a nominal even six-blade aperture gives six rays |
+| Ghost spacing | 0.60, 1.15, 1.65, 2.10 times the displacement from source towards the optical axis; screen centre is the axis |
+| Ghost angular radii | 1.2°, 2°, 0.7°, 1.4°: four fixed defocused aperture images |
+| Ghost energy shares | 0.000012, 0.000008, 0.000012, 0.000008 before tint; 0.004% total, of the order of double reflections from surfaces with residual reflectance below 1% |
+| Ghost RGB coating factors | (0.60,0.85,1), (0.65,1,0.75), (1,0.70,0.50), (0.70,0.65,1); assumed wavelength-dependent coating losses, never scene-dependent |
+| Ghost kernel | Disc base 0.18 plus a Gaussian ring of peak 0.60 at radius 0.78, width 0.10; the final 1/15 of its radius tapers to zero |
+| Image storage | Two 128×128 kernels in one atlas, normalized after quantization; three base-255 digits store linear intensity, avoiding stepped faint wings while preserving bilinear filtering |
+
+The original Sun disc is retained: redistributing at most 0.104% would change
+its unclipped brightness by less than 0.002 stops, while it is already clipped
+where this model adds glare. Output uses the same gamma-encoded screen blend
+as `createLightPoints`, with the same approximation on bright backgrounds.
+
+### Occlusion, readiness and cost
+
+A square 32×32 packed-depth target looks at the Sun from the rendering eye,
+with the Sun's actual angular diameter, a square projection, and the view's
+near/far planes. It renders visible, enabled, opaque or alpha-tested meshes
+that write depth and pass the main camera's layer mask. This includes terrain,
+Google 3D Tiles, aircraft and opaque cockpit structures; alpha tests, skinning
+and morphs use Babylon's depth shaders on both backends. Sky and non-depth
+overlays are excluded. Transparent glass transmits the flare, as it transmits
+the Sun; this model adds no glass attenuation. Unloaded geometry cannot occlude.
+
+An analytic spherical Earth horizon, using the sky atmosphere's radius and
+observer altitude, and the actual view frustum mask the same 812 equal-area
+disc samples. A one-pixel GPU pass counts samples that are both eligible and
+still clear in depth. Its two bytes hold the exact count, so CPU state and GPU
+visibility agree. Sample resolution is 1/812 (0.123%); very thin occluders can
+alias. The sphere follows the sky model, not an ellipsoid terrain silhouette;
+loaded terrain supplies its own depth edge.
+
+One screen mesh draws the glare and four ghost quads using that frame's GPU
+count. A late CPU readback cannot leave an old flare on screen. Readiness checks
+are guarded because Babylon's depth-target prewarm also emits its unbind event;
+prewarm must never publish an earlier frame's depth. Shader preparation polls
+with backoff and stops when ready, disposed or after a reported 10-second
+failure. Readbacks carry a frame generation; a superseded reading asks for one
+final current frame if needed, then settles. Publishing a current reading asks
+for no extra frame. There is no fade, random seed, temporal accumulation or
+continuous render hold. Occluders with animated vertices are sampled on every
+host-requested frame, even when their node transforms do not change.
+
+Off never constructs a probe, shader material, mesh, atlas, render target or
+timer. Turning it off disposes all owned resources. On adds a tiny depth pass
+(one depth draw per contributing mesh), a one-pixel reduction draw and one
+composite draw. It does not copy or process the full framebuffer. CPU readback
+is one pixel per requested frame, at most one outstanding. It remains a GPU
+renderer feature; the atmosphere's TS/WASM numerical cores are unchanged.
+
+Babylon references: [DepthRenderer](https://github.com/BabylonJS/Documentation/blob/master/content/features/featuresDeepDive/materials/advanced/depthValuesDepthRenderer.md),
+[asynchronous texture reads on WebGPU](https://github.com/BabylonJS/Documentation/blob/master/content/setup/support/webGPU/webGPUBreakingChanges.md).
+
+### Capture state
+
+`runtime.sky.getEnvironment().lensFlare` is live when read, including GPU work
+that finished after the sky computation. It has:
+
+```ts
+{
+  mode: "off" | "glare" | "flare",
+  status: "ready" | "pending" | "xr" | "unsupported" | "error",
+  settled: boolean,
+  sources: [{
+    id: "sun",
+    visibleFraction: number,
+    stopsOverWhite: number | null,
+    pixel: { x: number, y: number } | null
+  }],
+  reason?: string
+}
+```
+
+The fraction is relative to the **whole** Sun, including Earth, depth and
+viewport clipping. Stops are `log2(luminance(E) × fraction / ΩW)`, null when
+no source light is visible. Pixel coordinates are render pixels from the
+canvas's upper left, including its viewport; null behind the camera. Off and
+XR have no sources. `settled` means no shader preparation or latest-frame
+readback is outstanding; a capture should also require the requested mode
+and `status === "ready"`. Failure is settled with a reason, not success.
+There is no update to `app/scripts/capture-scenes/`; its owner can use this
+field for readiness and its report.
+
+Implementation and retained checks: [lens flare handoff report](lens-flare-report.md).
 
 ## Material policy
 
@@ -829,7 +983,9 @@ Every parameter has one home.
 | Sky, Exposure and display | `sky.exposure.mode` | Metered, Fixed | Metered |
 | | `sky.exposure.meterRange` | EV, −12 to 20, one track; shown when metered | 1 to 16 |
 | | `sky.exposure.adaptation` | ratio, 0 to 1; shown when metered | 0.75 |
+| | `sky.exposure.groundMeterAltitude` | km, 0 to 200, one track; shown when metered | 20 to 100 |
 | | `sky.exposure.ev100` | EV, −12 to 20; shown when fixed | 9.7 |
+| | `sky.exposure.lensFlare` | Off, Glare, Flare; Sun only, off in XR | Off |
 | | `renderer.exposureEV` | EV, −16 to 16 | 0 |
 
 Each default's reason is in the [catalogue](../../src/settings/catalogue/sky.ts).
@@ -938,7 +1094,9 @@ Verified on the CPU and in NullEngine:
 - Units: Sun intensity × white is the Sun's illuminance; sky colour × white × π is
   the sky's; the meter's EV is log2(0.4 E); exposure changes write new values
   without recomputing light; a night emitter of 1 cd/m² writes 0.42; adaptation's
-  share of each stop.
+  share of each stop; the meter on the ground below from orbit, part of the way
+  between its two heights and not at all below them, with the stars' worker
+  showing the same.
 - The ground: the factor at a point by its own Sun and Moon against the table; the
   table against the model; one factor for all imagery; lamps by the inverse square,
   their beam's edge and the ground's slope; the shader code Babylon builds for a PBR
@@ -1038,6 +1196,13 @@ had missed:
 - **No stars beside the sunlit planet from space**, which the user foresaw from the
   rule that hid them by day. They have an exposure of their own by height now, and
   the heights are a setting.
+- **From orbit the night lights showed only now and then**, found on 2026-10-25 in
+  pictures of the planet from 400 km: reliably only with the Sun behind the planet.
+  The meter read the light at the viewpoint, which stays in sunlight until the Sun
+  is 20° below the ground's horizon there, and exposed the night below for it. It
+  now reads the ground below from high above (`sky.exposure.groundMeterAltitude`).
+  A test meters from 400 km with the Sun 13° below the horizon under the viewpoint:
+  above EV 15 at the viewpoint, the range's floor, EV 1, on the ground below.
 
 Not verified:
 

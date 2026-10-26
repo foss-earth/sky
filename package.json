@@ -125,5 +125,8 @@
     "@foss-earth/research": "0.1.0",
     "@foss-earth/ui": "0.1.0",
     "@babylonjs/core": "8.56.2"
+  },
+  "dependencies": {
+    "@photostructure/tz-lookup": "11.7.0"
   }
 }

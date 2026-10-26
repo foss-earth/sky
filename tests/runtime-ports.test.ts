@@ -2,7 +2,8 @@ import { Matrix, FreeCamera, NullEngine, Scene, Vector3 } from "@babylonjs/core"
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createSettingsRegistry, type SettingsRegistry } from "@foss-earth/ui/settings";
 import { SKY_PARAMETERS } from "../src/settings.js";
-import { createSkyRuntime, type GroundLightProbeOptions, type NightLightsOptions, type SkyRuntime, type SkyRuntimeOptions } from "../src/babylon/index.js";
+import { bindSkyReadingsAndNotes, createSkyRuntime, type GroundLightProbeOptions, type NightLightsOptions, type SkyRuntime, type SkyRuntimeOptions } from "../src/babylon/index.js";
+import { adaptEv100, ev100ForIlluminance, luminance } from "../src/skyState.js";
 const engines: NullEngine[] = []; const skies: SkyRuntime[] = [];
 afterEach(() => { for (const sky of skies.splice(0)) sky.dispose(); for (const engine of engines.splice(0)) engine.dispose(); });
 function harness(extra: Partial<SkyRuntimeOptions> = {}, beforeCreate?: (settings: SettingsRegistry) => void) {
@@ -127,5 +128,39 @@ describe("Sky host/runtime lifecycle", () => {
     // A brighter switch, as Britain's 35 lx, switches them on earlier, with the Sun higher.
     h.settings.set("sky.nightLights.switchIlluminance", 35);
     expect(show().night.switchSunDeg).toBeGreaterThan(dusk.night.switchSunDeg! + 0.5);
+  });
+  it("meters the ground below from orbit, so the night there shows while the viewpoint is still in sunlight", () => {
+    // 0° N 0° E on the equinox at 19:00 UTC: the Sun is about 13° down.
+    const at = (altMeters: number) => {
+      const h = harness({ ecefToGeodetic: () => ({ latRad: 0, lonRad: 0, altMeters }) }, settings => settings.set("sky.time.utcHours", 19));
+      h.sky.update();
+      return h;
+    };
+    const orbit = at(400_000), sky = orbit.sky.getEnvironment()!;
+    // From 400 km the horizon dips 20°: the viewpoint is in full sunlight, the ground below in nautical twilight.
+    expect(sky.illumination.meteredLux).toBeGreaterThan(100_000);
+    expect(luminance(sky.illumination.groundIlluminance)).toBeLessThan(0.1);
+    expect(sky.meterGroundShare).toBe(1);
+    expect(sky.meteredEv100).toBe(ev100ForIlluminance(luminance(sky.illumination.groundIlluminance)));
+    // Exposed for the night below, at the metered range's dark end, where an exposure for the sunlit viewpoint was above EV 15.
+    expect(sky).toMatchObject({ ev100: 1, exposureHeld: "dark" });
+    expect(adaptEv100(ev100ForIlluminance(sky.illumination.meteredLux), ev100ForIlluminance(sky.illumination.zenithMeteredLux), 0.75)).toBeGreaterThan(15);
+    const detach = bindSkyReadingsAndNotes({ settings: orbit.settings, sky: orbit.sky });
+    expect(orbit.settings.getReading("sky.exposure.groundMeterAltitude")).toContain("At 400 km the meter reads the ground below");
+    expect(orbit.settings.getReading("sky.exposure.mode")).toContain("on the ground below");
+    detach();
+    // Halfway up the default 20 to 100 km, halfway in stops.
+    const middle = at(60_000).sky.getEnvironment()!;
+    expect(middle.meterGroundShare).toBeCloseTo(0.5, 12);
+    expect(middle.meteredEv100).toBeCloseTo((ev100ForIlluminance(middle.illumination.meteredLux) + ev100ForIlluminance(luminance(middle.illumination.groundIlluminance))) / 2, 12);
+    // Near the ground the meter reads the viewpoint's light, as it always has; the heights are the user's, and only show it again.
+    const low = at(500), near = low.sky.getEnvironment()!;
+    expect(near.meterGroundShare).toBe(0);
+    expect(near.meteredEv100).toBe(ev100ForIlluminance(near.illumination.meteredLux));
+    const computations = near.cost.computations;
+    low.settings.set("sky.exposure.groundMeterAltitude", { min: 0, max: 0 });
+    low.sky.update();
+    expect(low.sky.getEnvironment()).toMatchObject({ meterGroundShare: 1, meteredEv100: ev100ForIlluminance(luminance(near.illumination.groundIlluminance)) });
+    expect(low.sky.getEnvironment()!.cost.computations).toBe(computations);
   });
 });

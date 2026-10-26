@@ -103,6 +103,27 @@ describe("Sky runtime with its evaluation away from the page", () => {
     }
   });
 
+  it("matches the star colours where the meter reads partly the ground below", async () => {
+    const catalogue = await loadStarCatalogue(), loadStars = async () => catalogue;
+    // 40 km up at dusk: a quarter of the way, by default, from the light at the viewpoint to that on the ground below,
+    // and the stars halfway from the scene's exposure to the darkest.
+    const ecefToGeodetic = () => ({ latRad: 0, lonRad: 0, altMeters: 40_000 });
+    const page = harness({ loadStars, ecefToGeodetic }), away = inProcess(true), worker = harness({ loadStars, ecefToGeodetic, evaluator: away.evaluator });
+    for (const h of [page, worker]) h.settings.setMany({ "sky.stars.mode": "catalogue", "sky.time.utcHours": 18 });
+    for (let frame = 0; frame < 6; frame++) { page.sky.update(); worker.sky.update(); away.answer(); await settle(); }
+    worker.sky.update();
+    const sky = worker.sky.getEnvironment()!;
+    expect(sky.meterGroundShare).toBeCloseTo(0.25, 12);
+    expect(Math.abs(sky.meteredEv100 - Math.log2(0.4 * sky.illumination.meteredLux))).toBeGreaterThan(1);
+    expect(sky.stars).toMatchObject({ atmosphere: "worker", visible: true });
+    expect(page.sky.getEnvironment()).toMatchObject({ ev100: sky.ev100, starEv100: sky.starEv100 });
+    for (const kind of [VertexBuffer.PositionKind, VertexBuffer.ColorKind]) {
+      const a = new Float32Array((page.scene.getMeshByName("sky-stars") as Mesh).getVerticesData(kind)!);
+      const b = new Float32Array((worker.scene.getMeshByName("sky-stars") as Mesh).getVerticesData(kind)!);
+      expect(Buffer.compare(Buffer.from(a.buffer), Buffer.from(b.buffer))).toBe(0);
+    }
+  });
+
   it("uses only the current illumination's star batch and falls back exactly after selection changes or worker retirement", async () => {
     const catalogue: StarCatalogue = { count: 3, raDeg: new Float32Array([0, 90, 180]), decDeg: new Float32Array(3),
       vmag: new Float32Array([-1, 0, 1]), colourIndex: new Float32Array([0.1, 0.6, 1]), pmRaArcsec: new Float32Array(3), pmDecArcsec: new Float32Array(3) };

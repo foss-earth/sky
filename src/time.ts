@@ -83,3 +83,18 @@ export function zoneByLongitudeMinutes(lonDeg: number): number {
 export function solarMinuteMs(utcMs: number, lonDeg: number): number {
   return Math.round(solarClockMs(utcMs, lonDeg) / TIME.minuteMs) * TIME.minuteMs;
 }
+
+/** Civil clock fields in an explicitly supplied location's time zone. */
+export function civilClockMs(utcMs: number, zone: (utcMs: number) => ClockZone): number {
+  return utcMs + zone(utcMs).offsetMinutes * 60_000;
+}
+
+/** Resolve civil fields with the zone's date-dependent offset. Earlier occurrence
+ * wins repeated times; nonexistent spring times advance by the clock's gap. */
+export function utcForCivilClockMs(clockMs: number, zone: (utcMs: number) => ClockZone): number {
+  const offsets = new Set([-DAY_MS, 0, DAY_MS].map(delta => zone(clockMs + delta).offsetMinutes));
+  const candidates = [...offsets].map(offset => clockMs - offset * 60_000).sort((a, b) => a - b);
+  return candidates.find(utc => civilClockMs(utc, zone) === clockMs)
+    ?? candidates.filter(utc => civilClockMs(utc, zone) > clockMs).sort((a,b) => civilClockMs(a, zone) - civilClockMs(b, zone))[0]
+    ?? candidates[0]!;
+}

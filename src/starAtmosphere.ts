@@ -1,5 +1,5 @@
 import type { Atmosphere, Rgb } from "./atmosphere.js";
-import { adaptEv100, ev100ForIlluminance, starEv100, whiteLuminanceForEv100, type SkyIllumination, type SkyObserver } from "./skyState.js";
+import { adaptEv100, heightShare, meterEv100, starEv100, whiteLuminanceForEv100, type SkyIllumination, type SkyObserver } from "./skyState.js";
 import { starIlluminanceLux, starTint, type Matrix3 } from "./stars.js";
 import { DISPLAY_GAMMA } from "./units.js";
 
@@ -25,6 +25,8 @@ export interface StarColorPresentation {
   adaptation: number;
   meterRange: { min: number; max: number } | null;
   daylightAltitude: { min: number; max: number } | null;
+  /** `sky.exposure.groundMeterAltitude`, km; absent or null meters at the viewpoint at every height. */
+  groundMeterAltitude?: { min: number; max: number } | null;
   sizePx: number;
   pixelAngle: number;
   imageMean: number;
@@ -42,7 +44,9 @@ export function starColorToValue(illumination: SkyIllumination, presentation: St
   const p = presentation;
   let ev100 = p.ev100;
   if (p.mode !== "fixed") {
-    ev100 = adaptEv100(ev100ForIlluminance(illumination.meteredLux), ev100ForIlluminance(illumination.zenithMeteredLux), p.adaptation);
+    const heights = p.groundMeterAltitude;
+    const meter = meterEv100(illumination, heights ? heightShare(illumination.observer.altitudeMeters, heights.min * 1000, heights.max * 1000) : 0);
+    ev100 = adaptEv100(meter.meteredEv100, meter.zenithEv100, p.adaptation);
     if (p.meterRange) ev100 = ev100 < p.meterRange.min ? p.meterRange.min : ev100 > p.meterRange.max ? p.meterRange.max : ev100;
     if (p.meterRange && p.daylightAltitude) ev100 = starEv100(ev100, p.meterRange.min, illumination.observer.altitudeMeters,
       p.daylightAltitude.min * 1000, p.daylightAltitude.max * 1000);

@@ -4,4 +4,5 @@ export * from "./createNightLights.js";
 export * from "./createStarField.js";
 export * from "./createGroundLightProbe.js";
 export * from "./createLightPoints.js";
+export type { LensFlareMode, LensFlareState } from "./lensFlareModel.js";
 export * from "./readings.js";

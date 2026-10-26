@@ -3,3 +3,6 @@ FOSS Earth source code is licensed under GNU Affero General Public License versi
 The project may also offer separately negotiated commercial terms to copyright holders' customers. Those terms do not modify the AGPL grant.
 
 Third-party packages, map and terrain data, online services, and trademarks have their own notices and terms.
+
+Offline geographic time-zone lookup: @photostructure/tz-lookup (CC0-1.0),
+https://github.com/photostructure/tz-lookup . Geographic boundaries are approximate.

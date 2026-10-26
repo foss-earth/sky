@@ -1,5 +1,5 @@
 import type { SettingsStorage } from "@foss-earth/ui/settings";
-import type { createParameterSection, createSectionsElement, appendHostSections, createHelpTooltip, createIconButton } from "@foss-earth/ui/browser";
+import type { createParameterSection, createSectionsElement, appendHostSections, createHelpTooltip, createIconButton, createChoiceGroup, checkChoice } from "@foss-earth/ui/browser";
 /** Temporary structural dial contract; generic implementation stays UI-owned. */
 export interface DialMark {
   id: string;
@@ -74,6 +74,8 @@ export interface SkyPanelUiPorts {
   createIconButton: typeof createIconButton;
 }
 export interface SkyDateTimeUiPorts extends SkyPanelUiPorts {
+  createChoiceGroup: typeof createChoiceGroup;
+  checkChoice: typeof checkChoice;
   createDial(options: DialOptions): DialHandle;
   wrapTurn(turn: number): number;
 }
