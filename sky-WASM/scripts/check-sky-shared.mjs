@@ -66,18 +66,18 @@ for (const threads of [1, 2, 4, 8]) {
     if (!core.waitForHelpers(threads - 1, 10_000)) throw new Error("helpers did not start");
     const helperStartMs = performance.now() - started;
     const ports = { execution: "worker", kind: "threaded", createKernel: snapshot => core.createAtmosphere(snapshot), createTables: parameters => core.createTables(parameters) };
-    const native = createSkyEvaluationState({ now: () => performance.now(), numericPorts: ports });
+    const wasm = createSkyEvaluationState({ now: () => performance.now(), numericPorts: ports });
     const results = [];
     let workMs = 0, domeMs = 0;
     for (const [index, request] of requests.entries()) {
-      const actual = native.evaluate(request).result;
+      const actual = wasm.evaluate(request).result;
       for (const key of ["illumination", "tables", "groundTable", "dome"]) same(actual[key], expected[index][key], `${threads} threads, request ${index}: ${key}`);
       if (actual.numeric?.actual !== "threaded" || actual.numeric.state !== "ready") throw new Error(`Shared sky was not used: ${JSON.stringify(actual.numeric)}`);
       workMs += actual.timing.workMs; domeMs += actual.timing.domeMs;
       results.push(actual);
     }
     const last = results.at(-1).numeric;
-    native.dispose();
+    wasm.dispose();
     const status = core.status();
     if (status.actual !== "threaded") throw new Error(`Shared core retired: ${status.retiredReason}`);
     if (threads > 1 && (status.parallelBatches === 0 || last.batches.parity.parallel !== "same")) throw new Error("No parallel batch was compared");

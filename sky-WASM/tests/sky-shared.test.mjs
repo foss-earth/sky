@@ -297,9 +297,9 @@ test("a sky evaluation whose helper traps mid-frame keeps exact output and repor
     const wanted = reference.evaluate(request).result;
     reference.dispose();
     const ports = { execution: "worker", kind: "threaded", createKernel: value => core.createAtmosphere(value), createTables: value => core.createTables(value) };
-    const native = createSkyEvaluationState({ now: () => performance.now(), numericPorts: ports });
-    const first = native.evaluate(request).result, second = native.evaluate(request).result;
-    native.dispose();
+    const wasm = createSkyEvaluationState({ now: () => performance.now(), numericPorts: ports });
+    const first = wasm.evaluate(request).result, second = wasm.evaluate(request).result;
+    wasm.dispose();
     for (const result of [first, second]) {
       assertSameBits(result.dome.luminances, wanted.dome.luminances);
       assertSameBits(result.dome.directions, wanted.dome.directions);

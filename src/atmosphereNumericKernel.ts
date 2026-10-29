@@ -39,7 +39,7 @@ export interface AtmosphereNumericStatus {
   tableParity: "unchecked" | "same" | "different";
   /** Each operation needs its own first-input exact comparison. */
   parity: Record<Operation, "unchecked" | "same" | "different">;
-  nativeCalls: number;
+  wasmCalls: number;
   /**
    * Batched fans, when the kernel has them: each way of running them is
    * compared in full against the reference the first time it is used.
@@ -53,7 +53,7 @@ export interface AtmosphereNumericPorts {
   kind?: AtmosphereNumericBuild;
   /** Already-loaded synchronous worker module. The host bounds async startup. */
   createKernel(snapshot: AtmosphereNumericSnapshot): AtmosphereNumericKernel;
-  /** Optional native precompute. Its first complete tables are checked against JS. */
+  /** Optional WASM precompute. Its first complete tables are checked against JS. */
   createTables?(parameters: AtmosphereParameters): AtmosphereNumericSnapshot;
   onStatus?(status: AtmosphereNumericStatus): void;
 }
@@ -74,7 +74,7 @@ export function prepareAtmosphereNumericTables(parameters: AtmosphereParameters,
       || !(candidate.transmittance instanceof Float32Array) || candidate.transmittance.length !== 128 * 64 * 3
       || !(candidate.multipleScattering instanceof Float32Array) || candidate.multipleScattering.length !== 33 * 24 * 3
       || !(candidate.groundIrradiance instanceof Float32Array) || candidate.groundIrradiance.length !== 48 * 3
-      || ![candidate.transmittance, candidate.multipleScattering, candidate.groundIrradiance].every(table => table.every(Number.isFinite))) throw new Error("Invalid native atmosphere tables");
+      || ![candidate.transmittance, candidate.multipleScattering, candidate.groundIrradiance].every(table => table.every(Number.isFinite))) throw new Error("Invalid WASM atmosphere tables");
     return { candidate: { ...candidate, transmittance: candidate.transmittance.slice(), multipleScattering: candidate.multipleScattering.slice(), groundIrradiance: candidate.groundIrradiance.slice() }, admitted: gate.parity === "same" };
   } catch { gate.reason = "table-build-failed"; return null; }
 }
@@ -86,7 +86,7 @@ export function finishAtmosphereNumericTables(attempt: AtmosphereNumericTableAtt
   gate.parity = same ? "same" : "different";
   if (!same) gate.reason = "table-parity-mismatch";
 }
-/** A reference-only atmosphere has no native status. No global singleton. */
+/** A reference-only atmosphere has no WASM status. No global singleton. */
 export function atmosphereNumericStatusOf(atmosphere: Atmosphere): AtmosphereNumericStatus | undefined {
   return statuses.get(atmosphere)?.();
 }
@@ -96,7 +96,7 @@ export function attachAtmosphereNumericKernel(reference: Atmosphere, referenceFa
   const build: AtmosphereNumericBuild = ports.kind ?? "single";
   const status: AtmosphereNumericStatus = { requested: build, actual: "typescript", state: "checking", fallbackReason: null,
     cleanupFailed: false, tableBackend: tableBackend === "typescript" ? "typescript" : build, tableParity: tableGates.get(ports)?.parity ?? "unchecked",
-    parity: { radiance: "unchecked", fan: "unchecked", irradiance: "unchecked" }, nativeCalls: 0 };
+    parity: { radiance: "unchecked", fan: "unchecked", irradiance: "unchecked" }, wasmCalls: 0 };
   const readStatus = (): AtmosphereNumericStatus => ({ ...status, parity: { ...status.parity },
     ...(status.batches ? { batches: { ...status.batches, parity: { ...status.batches.parity } } } : {}) });
   const report = (): void => { try { ports.onStatus?.(readStatus()); } catch { /* Snapshot remains available through atmosphereNumericStatusOf. */ } };
@@ -129,12 +129,12 @@ export function attachAtmosphereNumericKernel(reference: Atmosphere, referenceFa
     return kernel;
   }
   function rgb(operation: "radiance" | "irradiance", out: Rgb, onReference: () => Rgb,
-    onNative: (native: AtmosphereNumericKernel, sample: Rgb) => Rgb): Rgb {
-    const native = activeKernel();
-    if (!native) return onReference();
+    onWasm: (wasm: AtmosphereNumericKernel, sample: Rgb) => Rgb): Rgb {
+    const wasm = activeKernel();
+    if (!wasm) return onReference();
     const expected = status.parity[operation] === "unchecked" ? onReference() : null;
     const sample: Rgb = [0, 0, 0];
-    try { status.nativeCalls++; onNative(native, sample); }
+    try { status.wasmCalls++; onWasm(wasm, sample); }
     catch { fallback(`${operation}-failed`); return expected ?? onReference(); }
     if (!sample.every(Number.isFinite)) { fallback(`${operation}-nonfinite`); return expected ?? onReference(); }
     if (expected) {
@@ -148,16 +148,16 @@ export function attachAtmosphereNumericKernel(reference: Atmosphere, referenceFa
   }
   const fan: RadianceFan = (altitude, mu, muSun, nus, count, steps, out) => {
     const onReference = (): void => referenceFan(altitude, mu, muSun, nus, count, steps, out);
-    const native = activeKernel();
-    if (!native) { onReference(); return; }
+    const wasm = activeKernel();
+    if (!wasm) { onReference(); return; }
     if (!Number.isSafeInteger(count) || count < 0 || count > 4096 || out.length < count * 3 || nus.length < count) {
-      fallback("fan-input-outside-native-bound"); onReference(); return;
+      fallback("fan-input-outside-wasm-bound"); onReference(); return;
     }
     if (count === 0) { onReference(); return; }
     const expected = status.parity.fan === "unchecked" ? new Float64Array(count * 3) : null;
     if (expected) referenceFan(altitude, mu, muSun, nus, count, steps, expected);
     const actual = new Float64Array(count * 3);
-    try { status.nativeCalls++; native.radianceFan(altitude, mu, muSun, nus.slice(0, count), count, steps, actual); }
+    try { status.wasmCalls++; wasm.radianceFan(altitude, mu, muSun, nus.slice(0, count), count, steps, actual); }
     catch { fallback("fan-failed"); if (expected) out.set(expected); else onReference(); return; }
     if (!actual.every(Number.isFinite)) { fallback("fan-nonfinite"); if (expected) out.set(expected); else onReference(); return; }
     if (expected) {
@@ -180,17 +180,17 @@ export function attachAtmosphereNumericKernel(reference: Atmosphere, referenceFa
   const batches: AtmosphereNumericStatus["batches"] | null = typeof kernel?.radianceFanRows === "function"
     ? status.batches = { parity: { solo: "unchecked", parallel: "unchecked" }, solo: 0, parallel: 0, rows: 0, outOfBounds: 0 } : null;
   const fanRows: RadianceFanRows | undefined = batches ? (altitude, muSun, rows, mus, counts, nus, steps, out) => {
-    const native = activeKernel();
-    if (!native?.radianceFanRows) return referenceRows(altitude, muSun, rows, mus, counts, nus, steps, out);
+    const wasm = activeKernel();
+    if (!wasm?.radianceFanRows) return referenceRows(altitude, muSun, rows, mus, counts, nus, steps, out);
     let total = 0;
     for (let row = 0; row < rows; row++) total += counts[row];
     if (!Number.isSafeInteger(rows) || rows < 0 || mus.length < rows || counts.length < rows || nus.length < total || out.length < total * 3) {
-      fallback("fan-rows-input-outside-native-bound"); return referenceRows(altitude, muSun, rows, mus, counts, nus, steps, out);
+      fallback("fan-rows-input-outside-wasm-bound"); return referenceRows(altitude, muSun, rows, mus, counts, nus, steps, out);
     }
     if (rows === 0) return true;
     const actual = new Float64Array(total * 3);
     let mode: AtmosphereFanRowsMode | false;
-    try { status.nativeCalls++; mode = native.radianceFanRows(altitude, muSun, rows, mus, counts, nus, steps, actual); }
+    try { status.wasmCalls++; mode = wasm.radianceFanRows(altitude, muSun, rows, mus, counts, nus, steps, actual); }
     catch (error) {
       const reason = error && typeof error === "object" && "reason" in error && typeof error.reason === "string" ? error.reason : null;
       fallback(reason ? `fan-rows-failed: ${reason}` : "fan-rows-failed"); return referenceRows(altitude, muSun, rows, mus, counts, nus, steps, out);
@@ -216,10 +216,10 @@ export function attachAtmosphereNumericKernel(reference: Atmosphere, referenceFa
   const atmosphere: Atmosphere = { ...reference,
     radiance: (altitude, mu, muSun, nu, steps, out) => rgb("radiance", out,
       () => reference.radiance(altitude, mu, muSun, nu, steps, out),
-      (native, sample) => native.radiance(altitude, mu, muSun, nu, steps, sample)),
+      (wasm, sample) => wasm.radiance(altitude, mu, muSun, nu, steps, sample)),
     skyIrradiance: (altitude, muSun, out) => rgb("irradiance", out,
       () => reference.skyIrradiance(altitude, muSun, out),
-      (native, sample) => native.skyIrradiance(altitude, muSun, sample)),
+      (wasm, sample) => wasm.skyIrradiance(altitude, muSun, sample)),
     dispose() {
       if (status.state === "disposed") return;
       status.actual = "typescript"; status.state = "disposed";

@@ -52,7 +52,7 @@ const ports = {
   createTables: parameters => core.createTables(parameters),
 };
 const reference = createSkyEvaluationState({ now: () => performance.now() });
-const native = createSkyEvaluationState({ now: () => performance.now(), numericPorts: ports });
+const wasm = createSkyEvaluationState({ now: () => performance.now(), numericPorts: ports });
 let requests = 0, domeValues = 0;
 const timing = { typescript: { workMs: 0, tablesMs: 0 }, single: { workMs: 0, tablesMs: 0 } };
 for (const parameters of PARAMETERS) for (const [lat, lon, alt] of PLACES) for (const utcMs of INSTANTS) {
@@ -62,18 +62,18 @@ for (const parameters of PARAMETERS) for (const [lat, lon, alt] of PLACES) for (
     dome: { layout: { zenithSamples: 32, azimuthSamples: 32, integrationSteps: 16 }, moonlitSky: true },
   };
   const expected = reference.evaluate(request).result;
-  const actual = native.evaluate(request).result;
+  const actual = wasm.evaluate(request).result;
   for (const key of ["illumination", "tables", "groundTable", "dome"]) same(actual[key], expected[key], key);
-  if (actual.numeric?.actual !== "single" || actual.numeric.state !== "ready") throw new Error(`Native sky was not used: ${JSON.stringify(actual.numeric)}`);
+  if (actual.numeric?.actual !== "single" || actual.numeric.state !== "ready") throw new Error(`WASM sky was not used: ${JSON.stringify(actual.numeric)}`);
   timing.typescript.workMs += expected.timing.workMs; timing.typescript.tablesMs += expected.timing.tablesMs;
   timing.single.workMs += actual.timing.workMs; timing.single.tablesMs += actual.timing.tablesMs;
   domeValues += expected.dome.luminances.length;
   requests++;
 }
-const last = native.evaluate({
+const last = wasm.evaluate({
   parameters: PARAMETERS[0], ephemeris: solarEphemeris(INSTANTS[0]), lunar: null, observer: observer(0, 0, 0), nightLuminance: 0.001, dome: null,
 }).result.numeric;
-reference.dispose(); native.dispose();
+reference.dispose(); wasm.dispose();
 const round = value => Math.round(value * 10) / 10;
 const result = {
   implementation: "actual Rust/WASM sky core versus @foss-earth/sky TypeScript, through createSkyEvaluationState",

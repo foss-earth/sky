@@ -37,7 +37,7 @@ hemisphere sky irradiance. Each operation's first input is compared exactly
 against the retained reference; an error or difference permanently uses the
 reference for that atmosphere. `atmosphereNumericStatusOf(atmosphere)` reports
 the requested/actual backend, per-operation parity, fallback and cleanup state.
-Call the optional `atmosphere.dispose()` before replacing a native atmosphere.
+Call the optional `atmosphere.dispose()` before replacing a WASM-backed atmosphere.
 
 The optional `ports.createTables(parameters)` builds transmittance, multiple
 scattering and ground irradiance in the worker as well. The first complete table
@@ -46,7 +46,7 @@ include the two precomputed ones ([Data and generation tools](#data-and-generati
 and the reference tables are used for that atmosphere.
 Reuse one ports object per worker: subsequent builds may skip
 the JavaScript precompute after that comparison. Table failure or mismatch
-permanently disables native work for that ports object. Status includes the
+permanently disables WASM work for that ports object. Status includes the
 actual table backend and table parity independently of query parity.
 
 The source port rejects a browser page and adds no engine dependency or app

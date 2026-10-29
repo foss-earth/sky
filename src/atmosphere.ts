@@ -274,8 +274,8 @@ function buildAtmosphere(parameters: AtmosphereParameters, now: () => number, nu
   const started = now();
   const aerosol = Math.max(0, parameters.aerosolOpticalDepth);
   const albedo = Math.min(1, Math.max(0, parameters.groundAlbedo));
-  const nativeTableAttempt = numericPorts && !supplied ? prepareAtmosphereNumericTables({ aerosolOpticalDepth: aerosol, groundAlbedo: albedo }, numericPorts) : null;
-  const inheritedTables = supplied ?? (nativeTableAttempt?.admitted ? nativeTableAttempt.candidate : null);
+  const wasmTableAttempt = numericPorts && !supplied ? prepareAtmosphereNumericTables({ aerosolOpticalDepth: aerosol, groundAlbedo: albedo }, numericPorts) : null;
+  const inheritedTables = supplied ?? (wasmTableAttempt?.admitted ? wasmTableAttempt.candidate : null);
   const mieExtinction = aerosol / ATMOSPHERE.mieScaleHeightMeters;
   const mieScattering = mieExtinction * ATMOSPHERE.mieSingleScatteringAlbedo;
   const rayleigh = ATMOSPHERE.rayleighScattering;
@@ -712,7 +712,7 @@ function buildAtmosphere(parameters: AtmosphereParameters, now: () => number, nu
     for (let c = 0; c < 3; c++) groundIrradiance[i * 3 + c] = Math.log(Math.max(TABLES.logFloor, scratch[c]));
   }
   groundIrradianceReady = true;
-  if (numericPorts) finishAtmosphereNumericTables(nativeTableAttempt, {
+  if (numericPorts) finishAtmosphereNumericTables(wasmTableAttempt, {
     aerosolOpticalDepth: aerosol, groundAlbedo: albedo, transmittance, multipleScattering, groundIrradiance,
   }, numericPorts);
 

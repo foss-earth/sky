@@ -20,7 +20,7 @@ nonexistent spring times forward by the DST gap.
 `@photostructure/tz-lookup` 11.7.0 supplies a compact offline coordinate lookup,
 licensed CC0-1.0: https://github.com/photostructure/tz-lookup . Its geographic
 boundaries are approximate; this limitation is in the clock help. Intl supplies
-historical/date-dependent offsets. No sky model or native/WASM core changed.
+historical/date-dependent offsets. No sky model or WASM core changed.
 
 Validation covers Minneapolis, Tokyo, Kathmandu, seasonal offsets, date rollover,
 DST repeats/gaps, default Civil, preservation of the instant on switching, field

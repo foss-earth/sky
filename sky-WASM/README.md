@@ -31,15 +31,15 @@ runs: 125 requests over five atmospheres, five places and five instants, with
 `{ execution: "worker", createKernel: core.createAtmosphere, createTables: core.createTables }`
 as the third argument to the sky's `createAtmosphere(parameters, now, ports)`.
 The sky port checks the first result of each operation against its retained
-reference before using native outputs. A mismatch or error permanently falls
-back to JavaScript and is reported by its status port. The first full native
+reference before using WASM outputs. A mismatch or error permanently falls
+back to JavaScript and is reported by its status port. The first full WASM
 table build is also compared against the retained JavaScript tables, and that
 first atmosphere uses the reference tables. Reusing the same ports object in
-the worker admits native tables on later builds only after that exact
-comparison. A table build failure or mismatch permanently disables native work
+the worker admits WASM tables on later builds only after that exact
+comparison. A table build failure or mismatch permanently disables WASM work
 for that ports object. Omitting `createTables` keeps reference table
 construction and only selects query kernels. A browser page is rejected by
-this wrapper; the app's sky evaluation worker loads it (`native.core.sky`). The
+this wrapper; the app's sky evaluation worker loads it (`wasm.core.sky`). The
 host should bound asynchronous module loading before calling the synchronous
 factory and should terminate a worker that blocks. A JavaScript timeout cannot
 interrupt synchronous WASM.
@@ -85,9 +85,9 @@ single build:
 - The ladder is threaded → single → TS worker, with no reload.
 
 **In the app**
-- `?set.native.core.sky=threaded&set.native.threads=4` asks for it.
-  `native.threads` takes 1–8 and includes the coordinator.
-- Helpers are `skySharedHelper.worker.ts` workers from the `native.workers`
+- `?set.wasm.core.sky=threaded&set.wasm.threads=4` asks for it.
+  `wasm.threads` takes 1–8 and includes the coordinator.
+- Helpers are `skySharedHelper.worker.ts` workers from the `wasm.workers`
   budget, reserved only on a cross-origin isolated page.
 - Without isolation the sky runs `single (worker)` with
   `not-cross-origin-isolated` and starts no helper.

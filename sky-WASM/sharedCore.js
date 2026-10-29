@@ -10,9 +10,9 @@ const FUNCTIONS = ["sky_shared_abi_version", "sky_shared_layout", "sky_shared_bu
   "sky_shared_radiance", "sky_shared_irradiance", "sky_shared_prepare", "sky_shared_fan_claimed"];
 const finite = values => values.every(value => typeof value === "number" && Number.isFinite(value) && Math.abs(value) <= 1e12);
 const stepsOf = value => {
-  if (!Number.isFinite(value)) throw new RangeError("Native sky steps must be finite");
+  if (!Number.isFinite(value)) throw new RangeError("WASM sky steps must be finite");
   const steps = Math.max(1, Math.round(value));
-  if (steps > MAX_STEPS) throw new RangeError("Native sky steps exceed 4096");
+  if (steps > MAX_STEPS) throw new RangeError("WASM sky steps exceed 4096");
   return steps;
 };
 const statusName = status => ({ 1: "invalid input", 2: "no current model", 3: "outside the shared bounds", 4: "invalid thread", 100: "a helper trapped" })[status] ?? "unknown status";
@@ -38,7 +38,7 @@ export function loadSharedSkyModule() {
   requireWorkerRealm();
   compiling ??= (async () => {
     const response = await fetch(new URL("./shared/sky-shared.wasm", import.meta.url));
-    if (!response.ok) throw new Error(`Native shared sky WASM fetch failed (${response.status})`);
+    if (!response.ok) throw new Error(`Shared sky WASM fetch failed (${response.status})`);
     return WebAssembly.compile(await response.arrayBuffer());
   })();
   return compiling;
@@ -250,12 +250,12 @@ export function createSharedSkyCore(module, options = {}) {
     createTables(parameters) {
       active();
       const aerosol = Math.max(0, parameters?.aerosolOpticalDepth), albedo = Math.min(1, Math.max(0, parameters?.groundAlbedo));
-      if (!finite([aerosol, albedo])) throw new RangeError("Invalid native sky atmosphere parameters");
+      if (!finite([aerosol, albedo])) throw new RangeError("Invalid WASM sky atmosphere parameters");
       busy = true;
       try {
         liveKernel = null;
         const status = callThread0(() => exports.sky_shared_build(aerosol, albedo));
-        if (status !== STATUS.OK) throw new Error("Native shared sky table construction failed");
+        if (status !== STATUS.OK) throw new Error("WASM shared sky table construction failed");
         return { aerosolOpticalDepth: aerosol, groundAlbedo: albedo, transmittance: tableViews[0].slice(), multipleScattering: tableViews[1].slice(), groundIrradiance: tableViews[2].slice() };
       } finally { busy = false; }
     },
@@ -264,7 +264,7 @@ export function createSharedSkyCore(module, options = {}) {
       const tables = [snapshot?.transmittance, snapshot?.multipleScattering, snapshot?.groundIrradiance];
       const lengths = [TRANS_LEN, MULTIPLE_LEN, GROUND_LEN];
       if (!finite([snapshot?.aerosolOpticalDepth, snapshot?.groundAlbedo]) || snapshot.aerosolOpticalDepth < 0 || snapshot.groundAlbedo < 0 || snapshot.groundAlbedo > 1
-        || tables.some((table, index) => !(table instanceof Float32Array) || table.length !== lengths[index] || !table.every(Number.isFinite))) throw new Error("Invalid native sky atmosphere table snapshot");
+        || tables.some((table, index) => !(table instanceof Float32Array) || table.length !== lengths[index] || !table.every(Number.isFinite))) throw new Error("Invalid WASM sky atmosphere table snapshot");
       busy = true;
       let generation;
       try { generation = commitTables(snapshot.aerosolOpticalDepth, snapshot.groundAlbedo, tables); }
@@ -274,12 +274,12 @@ export function createSharedSkyCore(module, options = {}) {
       liveKernel = kernel;
       const use = () => {
         active();
-        if (disposed) throw new Error("Native sky atmosphere disposed");
-        if (liveKernel !== kernel || exports.sky_shared_model() !== generation) throw new Error("Native shared sky model was replaced");
+        if (disposed) throw new Error("WASM sky atmosphere disposed");
+        if (liveKernel !== kernel || exports.sky_shared_model() !== generation) throw new Error("WASM shared sky model was replaced");
       };
       const rgb = (status, out) => {
-        if (status !== STATUS.OK) throw new Error(`Native shared sky operation failed: ${statusName(status)}`);
-        if (!(Number.isFinite(result[0]) && Number.isFinite(result[1]) && Number.isFinite(result[2]))) throw new Error("Native sky returned nonfinite radiance");
+        if (status !== STATUS.OK) throw new Error(`WASM shared sky operation failed: ${statusName(status)}`);
+        if (!(Number.isFinite(result[0]) && Number.isFinite(result[1]) && Number.isFinite(result[2]))) throw new Error("WASM sky returned nonfinite radiance");
         out[0] = result[0]; out[1] = result[1]; out[2] = result[2];
         return out;
       };
@@ -287,12 +287,12 @@ export function createSharedSkyCore(module, options = {}) {
       Object.assign(kernel, {
         kind: "threaded",
         radiance(altitude, mu, muSun, nu, steps, out) {
-          use(); if (!finite([altitude, mu, muSun, nu])) throw new RangeError("Invalid native sky ray input");
+          use(); if (!finite([altitude, mu, muSun, nu])) throw new RangeError("Invalid WASM sky ray input");
           const count = stepsOf(steps);
           return run(() => rgb(callThread0(() => exports.sky_shared_radiance(altitude, mu, muSun, nu, count)), out));
         },
         skyIrradiance(altitude, muSun, out) {
-          use(); if (!finite([altitude, muSun])) throw new RangeError("Invalid native sky irradiance input");
+          use(); if (!finite([altitude, muSun])) throw new RangeError("Invalid WASM sky irradiance input");
           return run(() => rgb(callThread0(() => exports.sky_shared_irradiance(altitude, muSun)), out));
         },
         /** One fan, on thread 0. */
@@ -301,7 +301,7 @@ export function createSharedSkyCore(module, options = {}) {
           const integrationSteps = stepsOf(steps);
           if (!finite([altitude, mu, muSun]) || !Number.isSafeInteger(count) || count < 0 || count > MAX_DIRECTIONS || count * integrationSteps > MAX_STEP_DIRECTIONS
             || integrationSteps > layout.maxSteps || !(nus instanceof Float64Array) || nus.length < count || !(out instanceof Float64Array) || out.length < count * 3
-            || !finite(nus.subarray(0, count))) throw new RangeError("Invalid or over-budget native sky fan input");
+            || !finite(nus.subarray(0, count))) throw new RangeError("Invalid or over-budget WASM sky fan input");
           if (count === 0) return;
           run(() => {
             nusView.set(nus.subarray(0, count));
@@ -321,7 +321,7 @@ export function createSharedSkyCore(module, options = {}) {
           use();
           const integrationSteps = stepsOf(steps);
           if (!finite([altitude, muSun]) || !Number.isSafeInteger(rows) || rows < 1 || !(mus instanceof Float64Array) || !(counts instanceof Uint32Array)
-            || mus.length < rows || counts.length < rows || !(nus instanceof Float64Array) || !(out instanceof Float64Array)) throw new RangeError("Invalid native sky fan rows");
+            || mus.length < rows || counts.length < rows || !(nus instanceof Float64Array) || !(out instanceof Float64Array)) throw new RangeError("Invalid WASM sky fan rows");
           let total = 0;
           for (let r = 0; r < rows; r++) {
             const count = counts[r];
@@ -329,8 +329,8 @@ export function createSharedSkyCore(module, options = {}) {
             total += count;
           }
           if (rows > layout.maxRows || total > layout.maxNus || integrationSteps > layout.maxSteps) return false;
-          if (nus.length < total || out.length < total * 3) throw new RangeError("Native sky fan rows are shorter than their counts");
-          if (!finite(mus.subarray(0, rows)) || !finite(nus.subarray(0, total))) throw new RangeError("Invalid native sky fan rows");
+          if (nus.length < total || out.length < total * 3) throw new RangeError("WASM sky fan rows are shorter than their counts");
+          if (!finite(mus.subarray(0, rows)) || !finite(nus.subarray(0, total))) throw new RangeError("Invalid WASM sky fan rows");
           return run(() => {
             nusView.set(nus.subarray(0, total));
             let start = 0;

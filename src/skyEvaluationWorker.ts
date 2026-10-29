@@ -76,7 +76,7 @@ export interface SkyHelperGroup {
 
 export interface SkyEvaluationBackend {
   kernel: SkyEvaluationKernel;
-  /** What evaluated the last request: a native build once one of its operations passed its first comparison. */
+  /** What evaluated the last request: a WASM build once one of its operations passed its first comparison. */
   actual: "typescript" | "single" | "threaded";
   state: "typescript" | "starting" | "checking" | "ready" | "fallback";
   fallbackReason: string | null;
@@ -104,7 +104,7 @@ export interface SkyEvaluationWorkerScope {
 export interface SkyEvaluationWorkerHostOptions {
   scope: SkyEvaluationWorkerScope;
   kernel: SkyEvaluationKernel;
-  /** Loads the native core, once, for `single` and as the fallback of `threaded`. Bounded by `startupTimeoutMs`. */
+  /** Loads the WASM core, once, for `single` and as the fallback of `threaded`. Bounded by `startupTimeoutMs`. */
   loadNumericCore?: () => Promise<SkyNumericCore>;
   /** Loads the shared-memory core, once and only for `threaded`; it rejects, with a `reason`, where memory cannot be shared. */
   loadThreadedCore?: () => Promise<SkyThreadedCore>;
@@ -173,7 +173,7 @@ export function installSkyEvaluationWorker(options: SkyEvaluationWorkerHostOptio
     }
     // No shared core: waiting helper ports are closed.
     connect(waitingPorts.splice(0));
-    if (!options.loadNumericCore) { backend.state = "fallback"; backend.fallbackReason ??= "native-core-unavailable"; return; }
+    if (!options.loadNumericCore) { backend.state = "fallback"; backend.fallbackReason ??= "wasm-core-unavailable"; return; }
     try {
       const core = await bounded(options.loadNumericCore);
       backend.startupMs = options.now() - started;
