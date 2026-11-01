@@ -561,9 +561,10 @@ place, an axis, an intensity in candelas for each band, and the cosines of the
 half-angles its beam is full within and gone beyond. For each, the imagery shader
 adds I ÷ d², times the cosine of the light's angle from the ground's up, times the
 beam's soft edge, with the reflectance and white of the rest: a factor per candela.
-Distance is held to a metre at least. A change in their number recompiles the
-shader; moving or dimming them is uniforms. They show only while a sky model lights
-the map.
+Distance is held to a metre at least. Their number, places and brightness are
+uniforms: the shader stops at the number given, so with none it evaluates none, and
+lamps coming or going compile nothing. They show only while a sky model lights the
+map.
 
 A lamp seen directly is a point of light. `createLightPoints` (`foss-earth/lights`)
 draws points of known intensity as the stars are drawn: each one's illuminance at
@@ -918,8 +919,8 @@ Following [render on demand](../render-on-demand.md):
   viewpoint, the exposure, their settings or a pixel's angle (by more than 1%) has
   changed. A reading of the ground's light changes none of those.
 - Map imagery's light moving is uniforms. Its shader is compiled again only when
-  the light is turned on or off, changes between per point and one factor, or the
-  number of lamps changes.
+  the light is turned on or off, changes between per point and one factor, or night
+  lights come or go. The number of lamps is a uniform.
 - A rendered reading of the ground's light asks for a frame only when it changes
   the light shown by more than 2%.
 - Night light tiles ask for a frame when a window is shown, or a tile arrives in the
