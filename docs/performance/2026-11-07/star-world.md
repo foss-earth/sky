@@ -1,6 +1,6 @@
 # The world's matrix read once for all the stars — 7 November 2026
 
-P-129 in the performance ledger. Sky `COMMIT`; baseline sky `e98cb02`
+P-129 in the performance ledger. Sky `6cfc3c8`; baseline sky `e98cb02`
 (after P-127). Not an item of the performance limits audit. It came from a
 CPU profile of the 0SFS flight app at night at a phone's viewport.
 
