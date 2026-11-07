@@ -26,7 +26,7 @@ import {
   meterEv100, observerAt, parseUtcDate, PHOTOMETRY, starEv100, whiteLuminanceForEv100, type SkyDomeGeometry, type SkyIllumination, type SkyObserver,
 } from "../skyState.js";
 import { illuminancePerRadiance, luminancePerRadiance, radianceAboveFloor, type NightLightPhotometry } from "../nightLights.js";
-import { blackBodyTint, celestialToEcefMatrix, loadStarCatalogue, starDirections, yearsFromJ2000, type StarCatalogue } from "../stars.js";
+import { blackBodyTint, celestialToEcefMatrix, loadStarCatalogue, starDirections, yearsFromJ2000, type Matrix3, type StarCatalogue } from "../stars.js";
 import { createGroundLightProbe, type GroundLightProbe } from "./createGroundLightProbe.js";
 import { createNightLights, type NightLights, type NightLightsOptions, type NightLightsState } from "./createNightLights.js";
 import { createStarField, starImageMean, starPixelAngleChanged, starsCouldShow, type StarField, type StarFieldCost } from "./createStarField.js";
@@ -334,7 +334,8 @@ export function createSkyRuntime(options: SkyRuntimeOptions): SkyRuntime {
 
   let directLight: DirectionalLight | null = null;
   let skyLight: HemisphericLight | null = null;
-  let dome: { mesh: Mesh; material: StandardMaterial; geometry: SkyDomeGeometry; positions: Float32Array; colors: Float32Array; key: string } | null = null;
+  /** `writtenScale`: the scale the mesh's vertices were last written at; null until written and once the geometry is filled again. */
+  let dome: { mesh: Mesh; material: StandardMaterial; geometry: SkyDomeGeometry; positions: Float32Array; colors: Float32Array; key: string; writtenScale: number | null } | null = null;
   /** The background the scene had, kept while the sky's own colour is shown, and the one the sky set. */
   let backgroundBefore: Color4 | null = null;
   let backgroundSet: Color4 | null = null;
@@ -352,6 +353,8 @@ export function createSkyRuntime(options: SkyRuntimeOptions): SkyRuntime {
   let starPixelAngle = 0;
   let starKey = "";
   let starWorld = "";
+  /** The stars' turn into the Earth's axes at the instant they were last drawn for. */
+  let starTurn: { utcMs: number; toEcef: Matrix3 } | null = null;
   let starInputGeneration = 0;
   let retainedStarGeneration: number | null = null;
   let starInputs: { catalogue: StarCatalogue; generation: number; years: number; magnitude: number; directions: Float32Array; vmag: Float32Array; colourIndex: Float32Array } | null = null;
@@ -497,7 +500,7 @@ export function createSkyRuntime(options: SkyRuntimeOptions): SkyRuntime {
     mesh.isPickable = false;
     mesh.applyFog = false;
     mesh.rotationQuaternion = Quaternion.Identity();
-    dome = { mesh, material, geometry, positions, colors, key };
+    dome = { mesh, material, geometry, positions, colors, key, writtenScale: null };
     return dome;
   }
 
@@ -824,15 +827,20 @@ export function createSkyRuntime(options: SkyRuntimeOptions): SkyRuntime {
 
     if (kind === "dome" && dome) {
       const { geometry, positions, colors, mesh } = dome;
-      // The standard material holds colour display-encoded, and decodes it before exposure; values above white stay above it.
-      for (let vertex = 0; vertex < geometry.vertexCount; vertex++) {
-        colors[vertex * 4] = (geometry.luminances[vertex * 3] * scale) ** (1 / DISPLAY_GAMMA);
-        colors[vertex * 4 + 1] = (geometry.luminances[vertex * 3 + 1] * scale) ** (1 / DISPLAY_GAMMA);
-        colors[vertex * 4 + 2] = (geometry.luminances[vertex * 3 + 2] * scale) ** (1 / DISPLAY_GAMMA);
+      // The vertices are the geometry's at this scale. A sky shown again for a turned world, as a moving
+      // floating origin turns it each frame while stars are out, would write and upload the same values.
+      if (!Object.is(dome.writtenScale, scale)) {
+        // The standard material holds colour display-encoded, and decodes it before exposure; values above white stay above it.
+        for (let vertex = 0; vertex < geometry.vertexCount; vertex++) {
+          colors[vertex * 4] = (geometry.luminances[vertex * 3] * scale) ** (1 / DISPLAY_GAMMA);
+          colors[vertex * 4 + 1] = (geometry.luminances[vertex * 3 + 1] * scale) ** (1 / DISPLAY_GAMMA);
+          colors[vertex * 4 + 2] = (geometry.luminances[vertex * 3 + 2] * scale) ** (1 / DISPLAY_GAMMA);
+        }
+        for (let index = 0; index < positions.length; index++) positions[index] = geometry.directions[index] * DOME_RADIUS_METERS;
+        mesh.updateVerticesData(VertexBuffer.PositionKind, positions, false, false);
+        mesh.updateVerticesData(VertexBuffer.ColorKind, colors, false, false);
+        dome.writtenScale = scale;
       }
-      for (let index = 0; index < positions.length; index++) positions[index] = geometry.directions[index] * DOME_RADIUS_METERS;
-      mesh.updateVerticesData(VertexBuffer.PositionKind, positions, false, false);
-      mesh.updateVerticesData(VertexBuffer.ColorKind, colors, false, false);
       // The dome's own axes: +X towards the Sun's bearing, +Y up, +Z = X × Y in the Earth's axes.
       const forward = toScene(...state.sunHorizontal);
       const side = Vector3.Cross(forward, up).normalize();
@@ -906,6 +914,12 @@ export function createSkyRuntime(options: SkyRuntimeOptions): SkyRuntime {
         sizePx: number("sky.stars.sizePx"), pixelAngle: pixelAngle(), imageMean: starImageMean() } };
   }
 
+  /** The stars' turn into the Earth's axes at an instant. Drawn again at the same instant, for a turned world, they keep it. */
+  function starToEcef(utcMs: number): Matrix3 {
+    if (!starTurn || starTurn.utcMs !== utcMs) starTurn = { utcMs, toEcef: celestialToEcefMatrix(utcMs) };
+    return starTurn.toEcef;
+  }
+
   /** Draws the stars against their own white: `scale` is one over it. */
   function showStars(state: SkyIllumination, scale: number): void {
     if (model() !== "dome" || settings.get("sky.stars.mode") === "off") {
@@ -948,7 +962,7 @@ export function createSkyRuntime(options: SkyRuntimeOptions): SkyRuntime {
       && starSamples.generation === starInputs.generation ? starSamples.result : null;
     starCost = stars.update({
       catalogue,
-      toEcef: celestialToEcefMatrix(state.utcMs),
+      toEcef: starToEcef(state.utcMs),
       years,
       observer: state.observer,
       atmosphere,
@@ -1080,6 +1094,7 @@ export function createSkyRuntime(options: SkyRuntimeOptions): SkyRuntime {
       if (kind === "dome") {
         const target = ensureDome();
         fillSkyDome(target.geometry, atmosphere, illumination, { moonlitSky: moonMode() === "sky" });
+        target.writtenScale = null;
         cost.domeMs = clock() - sampled;
         cost.domeSamples = target.geometry.evaluations;
         cost.moonSamples = target.geometry.moonEvaluations;
@@ -1173,6 +1188,7 @@ export function createSkyRuntime(options: SkyRuntimeOptions): SkyRuntime {
       if (filled && filled.vertexCount === target.geometry.vertexCount && filled.rows === target.geometry.rows && filled.columns === target.geometry.columns) {
         target.geometry.directions.set(filled.directions);
         target.geometry.luminances.set(filled.luminances);
+        target.writtenScale = null;
         target.geometry.evaluations = filled.evaluations;
         target.geometry.moonEvaluations = filled.moonEvaluations;
         cost.domeMs = result.timing.domeMs;
