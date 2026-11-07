@@ -1,6 +1,6 @@
 # The sky dome written when it changes, not each time the world turns — 7 November 2026
 
-P-127 in the performance ledger. Sky `COMMIT`; baseline sky `0f91945`. Not
+P-127 in the performance ledger. Sky `4e8fbaa`; baseline sky `0f91945`. Not
 an item of the performance limits audit. It came from a CPU profile of the
 0SFS flight app at a phone's viewport.
 
