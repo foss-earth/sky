@@ -429,8 +429,14 @@ export function createSkyRuntime(options: SkyRuntimeOptions): SkyRuntime {
 
   /** toScene into one vector, used again for each star: the star field reads a direction before it asks for the next. */
   const starDirection = new Vector3();
+  /**
+   * The world's matrix for one update of the star field, read at its first star. Nothing moves the world while
+   * the field works, and a host may build the matrix again at each read, as the globe does, through its parents.
+   */
+  let starFieldWorld: { matrix: Matrix | null } | null = null;
   function starToScene(x: number, y: number, z: number): Vector3 {
-    const world = options.getWorldMatrix();
+    starFieldWorld ??= { matrix: options.getWorldMatrix() };
+    const world = starFieldWorld.matrix;
     return (world ? Vector3.TransformNormalFromFloatsToRef(x, y, z, world, starDirection) : starDirection.copyFromFloats(x, y, z)).normalize();
   }
 
@@ -960,20 +966,24 @@ export function createSkyRuntime(options: SkyRuntimeOptions): SkyRuntime {
       && starSamples?.illumination === state && starInputs?.catalogue === catalogue
       && starInputs.years === Math.round(years) && starInputs.magnitude === limitingMagnitude
       && starSamples.generation === starInputs.generation ? starSamples.result : null;
-    starCost = stars.update({
-      catalogue,
-      toEcef: starToEcef(state.utcMs),
-      years,
-      observer: state.observer,
-      atmosphere,
-      atmosphereBatch: currentStarBatch,
-      solarIlluminanceAt1AuLux: PHOTOMETRY.solarIlluminanceLux,
-      scale,
-      toScene: starToScene,
-      limitingMagnitude,
-      sizePx: number("sky.stars.sizePx"),
-      pixelAngle: starPixelAngle,
-    });
+    try {
+      starCost = stars.update({
+        catalogue,
+        toEcef: starToEcef(state.utcMs),
+        years,
+        observer: state.observer,
+        atmosphere,
+        atmosphereBatch: currentStarBatch,
+        solarIlluminanceAt1AuLux: PHOTOMETRY.solarIlluminanceLux,
+        scale,
+        toScene: starToScene,
+        limitingMagnitude,
+        sizePx: number("sky.stars.sizePx"),
+        pixelAngle: starPixelAngle,
+      });
+    } finally {
+      starFieldWorld = null;
+    }
   }
 
   /** Renders the ground below the receiver for the light it sends up, when a reading is due. */
